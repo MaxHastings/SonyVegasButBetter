@@ -219,6 +219,8 @@ struct Editor {
     project_settings: bool,
     shortcuts: Vec<Binding>,
     goto: Option<String>,
+    capture_path: Option<PathBuf>,
+    capture_requested: bool,
     #[cfg(feature = "gui-test")]
     harness: Option<harness::Harness>,
 }
@@ -328,6 +330,8 @@ impl Editor {
             project_settings: false,
             shortcuts: bindings(),
             goto: None,
+            capture_path: std::env::var_os("SVBB_UI_SNAPSHOT").map(PathBuf::from),
+            capture_requested: false,
             #[cfg(feature = "gui-test")]
             harness: None,
         };
@@ -1011,6 +1015,30 @@ impl eframe::App for Editor {
         }
     }
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(path) = self.capture_path.clone() {
+            let captured = ctx.input(|i| {
+                i.events.iter().find_map(|e| {
+                    if let egui::Event::Screenshot { image, .. } = e {
+                        Some(image.clone())
+                    } else {
+                        None
+                    }
+                })
+            });
+            if let Some(frame) = captured {
+                let rgba: Vec<_> = frame.pixels.iter().flat_map(|p| p.to_array()).collect();
+                if let Some(image) =
+                    image::RgbaImage::from_raw(frame.width() as u32, frame.height() as u32, rgba)
+                    && let Err(e) = image.save(path)
+                {
+                    self.error = Some(format!("Diagnostic image: {e}"));
+                }
+                self.capture_path = None;
+            } else if !self.capture_requested && self.last_edit.elapsed() > Duration::from_secs(2) {
+                self.capture_requested = true;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
+            }
+        }
         self.process(ctx);
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
             if self.render_job.is_some() {

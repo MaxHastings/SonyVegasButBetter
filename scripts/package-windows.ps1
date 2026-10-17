@@ -12,7 +12,7 @@ Get-ChildItem -LiteralPath (Join-Path $projectRoot 'licenses') -File | Copy-Item
 Copy-Item -LiteralPath (Join-Path $projectRoot 'licenses\dependencies') -Destination (Join-Path $packageRoot 'licenses') -Recurse -Force
 & git -C $projectRoot archive --format=zip -o (Join-Path $packageRoot 'source\svbb-source.zip') HEAD
 if ($LASTEXITCODE -ne 0) { throw 'Source archive failed' }
-Get-ChildItem -LiteralPath $packageRoot -Recurse -File | ForEach-Object {
+Get-ChildItem -LiteralPath $packageRoot -Recurse -File | Where-Object { $_.Name -ne 'SHA256SUMS.txt' } | ForEach-Object {
     $relativePath = $_.FullName.Substring($packageRoot.Length + 1)
     '{0}  {1}' -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(),$relativePath
 } | Set-Content -LiteralPath (Join-Path $packageRoot 'SHA256SUMS.txt')

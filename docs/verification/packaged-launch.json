@@ -1,0 +1,17 @@
+{
+  "passed": true,
+  "platform": "Windows x64",
+  "source_revision": "a2e84ea plus framebuffer diagnostic",
+  "working_directory": "system temporary directory",
+  "native_library_loaded_from": "artifacts/SVBB-0.1.0-windows-x64/runtime/libmpv-2.dll",
+  "window_responding": true,
+  "project_reopened": true,
+  "framebuffer_review": "Actual app framebuffer confirms preview, panels, timeline, waveforms and controls; external WGC capture is blank",
+  "output_validation": {
+    "files": 2,
+    "full_decodes_passed": true,
+    "duration_seconds": 230,
+    "video": "H.264, 1920x1080, 60 fps",
+    "audio": "AAC, stereo, 48000 Hz"
+  }
+}

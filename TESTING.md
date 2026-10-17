@@ -74,6 +74,12 @@ audio-device loss and a real-recording human listen/edit session remain manual
 checks in PLAYTEST.md. Normal saves and deliberate interruption are tested;
 actual power-loss and full-disk fault injection are not.
 
+The window capture helper also returned blank images for this OpenGL surface.
+SVBB's own rendered framebuffer was captured and visually reviewed successfully;
+the workspace, actual preview, timeline and waveforms are present. For local
+diagnostics, set `SVBB_UI_SNAPSHOT` to an absolute PNG path before launching; one
+framebuffer capture is saved after the workspace settles. It is local and opt-in.
+
 ## Performance observations
 
 AMD Ryzen 7 7800X3D, 8 cores/16 threads, 127 GiB RAM, Windows x64. The adapter

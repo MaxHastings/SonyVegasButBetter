@@ -1,0 +1,31 @@
+[package]
+name = "svbb"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "SonyVegasButBetter — a local cut, mix and export workstation"
+
+[dependencies]
+anyhow = "=1.0.104"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.145"
+uuid = { version = "=1.18.1", features = ["v4", "serde"] }
+rusqlite = { version = "=0.32.1", features = ["bundled"] }
+eframe = { version = "=0.31.1", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+rfd = "=0.15.4"
+libloading = "=0.8.9"
+sha2 = "=0.10.9"
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
+same-file = "=1.0.6"
+
+[features]
+gui-test = []
+
+[dev-dependencies]
+tempfile = "=3.20.0"
+proptest = "=1.11.0"
+
+[profile.release]
+lto = "thin"
+strip = true
+

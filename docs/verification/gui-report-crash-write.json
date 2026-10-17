@@ -1,0 +1,9 @@
+{
+  "manual_gain": 0.0,
+  "passed": true,
+  "recovery": "test-output/gui-recovery.svbb",
+  "recovery_gain": -13,
+  "saved_project": "test-output/gui-crash-source.svbb",
+  "steps": 7,
+  "termination": "intentional process exit 86 after autosave"
+}

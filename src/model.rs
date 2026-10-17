@@ -256,5 +256,10 @@ pub fn match_loudness(integrated: f64, true_peak: f64) -> Result<f64> {
         integrated.is_finite() && true_peak.is_finite() && integrated >= -50.,
         "Recording is silent or below -50 LUFS; automatic boost refused. Use manual gain after checking the noise."
     );
-    Ok((-16. - integrated).min(-1. - true_peak).clamp(-24., 18.))
+    let gain = (-16. - integrated).min(-1. - true_peak).clamp(-60., 18.);
+    ensure!(
+        true_peak + gain <= -1. + 1e-6,
+        "True peak is outside the supported automatic gain range"
+    );
+    Ok(gain)
 }

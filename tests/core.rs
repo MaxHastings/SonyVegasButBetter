@@ -233,6 +233,34 @@ fn schema_migration_fixture() {
     assert!(persistence::migrate(&mut c).is_err());
 }
 #[test]
+fn populated_old_project_migrates_without_losing_edits() {
+    let temp = tempfile::tempdir().unwrap();
+    let file = temp.path().join("old.svbb");
+    let mut p = project();
+    p.media[0].path = temp.path().join("source.mp4");
+    add(&mut p, 0, 0, 7);
+    add(&mut p, 1, 2, 3);
+    p.tracks[1].gain_db = -3.;
+    persistence::save(&file, &p).unwrap();
+    let conn = rusqlite::Connection::open(&file).unwrap();
+    conn.execute_batch("ALTER TABLE clips DROP COLUMN fade_in; ALTER TABLE clips DROP COLUMN fade_out; PRAGMA user_version=1;").unwrap();
+    drop(conn);
+    assert_eq!(persistence::load(&file).unwrap(), p);
+    assert!(file.with_extension("v1.backup").is_file());
+}
+#[test]
+fn source_overwrite_and_timestamp_overflow_are_refused() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("source.mp4");
+    std::fs::write(&source, b"recording").unwrap();
+    let mut p = project();
+    p.media[0].path = source.clone();
+    assert!(persistence::save(&source, &p).is_err());
+    assert_eq!(std::fs::read(source).unwrap(), b"recording");
+    assert!(Rational::new(i64::MAX, 1).to_ticks(i64::MAX).is_err());
+    assert!(match_loudness(10., 100.).is_err());
+}
+#[test]
 fn export_plan_obeys_model() {
     let mut p = project();
     add(&mut p, 0, 0, 4);

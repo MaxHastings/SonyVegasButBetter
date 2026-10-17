@@ -86,6 +86,15 @@ impl Runtime {
         let data = std::env::var_os("LOCALAPPDATA")
             .or_else(|| std::env::var_os("XDG_CACHE_HOME"))
             .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var_os("HOME").map(|home| {
+                    PathBuf::from(home).join(if cfg!(target_os = "macos") {
+                        "Library/Caches"
+                    } else {
+                        ".cache"
+                    })
+                })
+            })
             .unwrap_or_else(std::env::temp_dir);
         let cache = data.join("SVBB").join("cache-v1");
         fs::create_dir_all(&cache)?;
@@ -119,6 +128,13 @@ impl Runtime {
             .iter()
             .find(|s| s["codec_type"] == "video" && s["disposition"]["attached_pic"] != 1);
         let audio = streams.iter().find(|s| s["codec_type"] == "audio");
+        ensure!(
+            !video.is_some_and(|s| matches!(
+                s["color_transfer"].as_str(),
+                Some("smpte2084" | "arib-std-b67")
+            )),
+            "HDR video is outside SVBB 0.1's supported SDR workflow"
+        );
         ensure!(
             video.is_some() || audio.is_some(),
             "File has no supported video or audio stream"
@@ -197,13 +213,13 @@ impl Runtime {
             return Ok(vec![]);
         }
         let cache = self.asset_cache(m, "wave-v1")?;
-        if let Ok(bytes) = fs::read(&cache) {
-            if bytes.len().is_multiple_of(4) {
-                return Ok(bytes
-                    .chunks_exact(4)
-                    .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
-                    .collect());
-            }
+        if let Ok(bytes) = fs::read(&cache)
+            && bytes.len().is_multiple_of(4)
+        {
+            return Ok(bytes
+                .chunks_exact(4)
+                .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+                .collect());
         }
         let mut child = command(&self.ffmpeg)
             .args(["-v", "error", "-nostdin", "-i"])

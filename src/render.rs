@@ -74,6 +74,22 @@ pub fn master(protect: bool) -> &'static str {
         "anull"
     }
 }
+fn video_filter(width: u32, height: u32, fps: Rational, duration: Tick, offset: Tick) -> String {
+    format!(
+        "fps={}/{}:round=up:start_time={},setpts=PTS-STARTPTS,scale={}:{}:force_original_aspect_ratio=decrease:force_divisible_by=2:reset_sar=1,pad={}:{}:(ow-iw)/2:(oh-ih)/2,setsar=1,tpad=start_mode=add:start_duration={}:stop_mode=clone:stop_duration={},trim=duration={},setpts=PTS-STARTPTS,format=yuv420p",
+        fps.num,
+        fps.den,
+        decimal(offset),
+        width,
+        height,
+        width,
+        height,
+        decimal(offset),
+        decimal(duration),
+        decimal(duration)
+    )
+}
+
 pub fn plan(p: &Project, s: &RenderSettings) -> Result<Plan> {
     p.validate()?;
     ensure!(p.duration() > 0, "The timeline is empty");
@@ -95,19 +111,6 @@ pub fn plan(p: &Project, s: &RenderSettings) -> Result<Plan> {
     let mut vids = vec![];
     let mut auds = vec![];
     let mut cursor = 0;
-    let video_filter = |duration: Tick| {
-        format!(
-            "scale={}:{}:force_original_aspect_ratio=decrease:force_divisible_by=2,pad={}:{}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={}/{},tpad=stop_mode=clone:stop_duration={},trim=duration={},setpts=PTS-STARTPTS,format=yuv420p",
-            s.width,
-            s.height,
-            s.width,
-            s.height,
-            s.fps.num,
-            s.fps.den,
-            decimal(duration),
-            decimal(duration)
-        )
-    };
     for c in p.lane(0) {
         if c.start > cursor {
             let name = format!("gap{}", vids.len());
@@ -115,8 +118,8 @@ pub fn plan(p: &Project, s: &RenderSettings) -> Result<Plan> {
                 "color=c=black:s={}x{}:r={}/{}:d={}[{}];",
                 s.width,
                 s.height,
-                s.fps.num,
-                s.fps.den,
+                p.fps.num,
+                p.fps.den,
                 decimal(c.start - cursor),
                 name
             );
@@ -124,12 +127,26 @@ pub fn plan(p: &Project, s: &RenderSettings) -> Result<Plan> {
         }
         let m = p.media(&c.media)?;
         let n = inputs.len();
-        inputs.push(input(&m.path, c.source_in, c.duration));
+        let mut video_input = input(&m.path, c.source_in, c.duration);
+        // Input -t counts decoded preroll and can stop before B/VFR frames that
+        // cover this range. The trim filter terminates this input precisely.
+        video_input.drain(4..6);
+        // Keep the frame covering a VFR cut. Accurate CLI seek discards frames
+        // whose PTS precedes the cut, even when they are still being displayed.
+        // Decode from the preceding keyframe and let fps trim negative PTS.
+        video_input.insert(0, "-noaccurate_seek".into());
+        inputs.push(video_input);
         let name = format!("v{}", vids.len());
         graph += &format!(
-            "[{n}:{}]setpts=PTS-STARTPTS,{}[{name}];",
+            "[{n}:{}]{}[{name}];",
             m.video.as_ref().unwrap().index,
-            video_filter(c.duration)
+            video_filter(
+                s.width,
+                s.height,
+                p.fps,
+                c.duration,
+                (m.video.as_ref().unwrap().start - c.source_in).max(0)
+            )
         );
         vids.push(name);
         cursor = c.end();
@@ -140,17 +157,20 @@ pub fn plan(p: &Project, s: &RenderSettings) -> Result<Plan> {
             "color=c=black:s={}x{}:r={}/{}:d={}[{}];",
             s.width,
             s.height,
-            s.fps.num,
-            s.fps.den,
+            p.fps.num,
+            p.fps.den,
             decimal(p.duration() - cursor),
             name
         );
         vids.push(name);
     }
     graph += &format!(
-        "{}concat=n={}:v=1:a=0[vout];",
+        "{}concat=n={}:v=1:a=0[vbase];[vbase]fps={}/{}:round=up,trim=duration={}[vout];",
         vids.iter().map(|v| format!("[{v}]")).collect::<String>(),
-        vids.len()
+        vids.len(),
+        s.fps.num,
+        s.fps.den,
+        decimal(p.duration())
     );
     for lane in 0..3 {
         for c in p.lane(lane) {
@@ -205,6 +225,7 @@ pub fn run_progress(
         .args([
             "-hide_banner",
             "-nostdin",
+            "-xerror",
             "-y",
             "-filter_complex_threads",
             "2",
@@ -328,6 +349,7 @@ pub fn export(
         r?;
         ensure!(!cancel.load(Ordering::Relaxed), "Cancelled");
         validate(rt, &part, p.duration(), s)?;
+        ensure!(!cancel.load(Ordering::Relaxed), "Cancelled");
         fs::OpenOptions::new()
             .read(true)
             .write(true)
@@ -426,6 +448,8 @@ pub fn audio_cache(rt: &Runtime, m: &Media, c: &Clip, cancel: &AtomicBool) -> Re
         filter,
         "-c:a".into(),
         "pcm_f32le".into(),
+        "-rf64".into(),
+        "auto".into(),
         part.to_string_lossy().into(),
     ]);
     let result = run_progress(rt, &args, c.duration, cancel, |_| {});
@@ -437,9 +461,78 @@ pub fn audio_cache(rt: &Runtime, m: &Media, c: &Clip, cancel: &AtomicBool) -> Re
     result?;
     Ok(path)
 }
+/// Source-level project-frame cache preserves the frame covering VFR cuts.
+/// Later splits, trims, reorders and seeks reuse this file unchanged.
+pub fn video_cache(
+    rt: &Runtime,
+    m: &Media,
+    fps: Rational,
+    cancel: &AtomicBool,
+    mut progress: impl FnMut(f32),
+) -> Result<PathBuf> {
+    let stamp = fs::metadata(&m.path)?
+        .modified()?
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_nanos();
+    let filter = video_filter(
+        960,
+        540,
+        fps,
+        m.duration,
+        m.video.as_ref().context("No video stream")?.start.max(0),
+    );
+    let key = format!(
+        "preview-video-v1|{}|{}|{}|{}",
+        m.path.display(),
+        m.file_size,
+        stamp,
+        filter
+    );
+    let hash = format!("{:x}", Sha256::digest(key));
+    let path = rt.cache.join(format!("video-{hash}.mp4"));
+    if path.is_file() {
+        return Ok(path);
+    }
+    let part = rt.cache.join(format!("video-{}.part.mp4", id()));
+    let args = vec![
+        "-threads".into(),
+        "4".into(),
+        "-i".into(),
+        m.path.to_string_lossy().into(),
+        "-map".into(),
+        format!("0:{}", m.video.as_ref().unwrap().index),
+        "-an".into(),
+        "-vf".into(),
+        filter,
+        "-c:v".into(),
+        "libx264".into(),
+        "-threads".into(),
+        "4".into(),
+        "-preset".into(),
+        "ultrafast".into(),
+        "-crf".into(),
+        "18".into(),
+        "-bf".into(),
+        "0".into(),
+        "-g".into(),
+        (fps.num / fps.den).max(1).to_string(),
+        "-video_track_timescale".into(),
+        HZ.to_string(),
+        "-movflags".into(),
+        "+faststart".into(),
+        part.to_string_lossy().into(),
+    ];
+    let result = run_progress(rt, &args, m.duration, cancel, &mut progress);
+    if result.is_ok() {
+        fs::rename(&part, &path)?;
+    } else {
+        let _ = fs::remove_file(&part);
+    }
+    result?;
+    Ok(path)
+}
 #[derive(Clone, Debug)]
 pub struct PreviewPlan {
-    pub video: PathBuf,
     pub combined: PathBuf,
     pub graph: String,
 }
@@ -455,16 +548,24 @@ fn entry(path: &Path, start: Tick, duration: Tick) -> String {
         decimal(duration)
     )
 }
-fn gap_entries(path: &Path, mut duration: Tick) -> String {
+fn gap_entries(path: &Path, mut duration: Tick, limit: Tick) -> String {
     let mut s = String::new();
     while duration > 0 {
-        let d = duration.min(HZ * 3600);
+        let d = duration.min(limit);
         s += &entry(path, 0, d);
         duration -= d;
     }
     s
 }
 pub fn prepare_preview(rt: &Runtime, p: &Project, cancel: &AtomicBool) -> Result<PreviewPlan> {
+    prepare_preview_progress(rt, p, cancel, |_, _| {})
+}
+pub fn prepare_preview_progress(
+    rt: &Runtime,
+    p: &Project,
+    cancel: &AtomicBool,
+    mut progress: impl FnMut(&str, f32),
+) -> Result<PreviewPlan> {
     p.validate()?;
     ensure!(p.duration() > 0, "Timeline is empty");
     ensure!(
@@ -472,7 +573,9 @@ pub fn prepare_preview(rt: &Runtime, p: &Project, cancel: &AtomicBool) -> Result
         "Relink missing media before previewing"
     );
     let silence = rt.cache.join("silence-f32-1h.wav");
-    let black = rt.cache.join("black-1h.mkv");
+    let black = rt
+        .cache
+        .join(format!("black-frames-{}-{}-10s.mp4", p.fps.num, p.fps.den));
     if !silence.exists() {
         use std::io::{Seek, SeekFrom, Write};
         let mut f = fs::File::create(&silence)?;
@@ -502,13 +605,17 @@ pub fn prepare_preview(rt: &Runtime, p: &Project, cancel: &AtomicBool) -> Result
                 "-f",
                 "lavfi",
                 "-i",
-                "color=black:s=16x16:r=1:d=3600",
+                &format!("color=black:s=960x540:r={}/{}:d=10", p.fps.num, p.fps.den),
                 "-c:v",
                 "libx264",
                 "-preset",
                 "ultrafast",
+                "-bf",
+                "0",
                 "-g",
-                "1",
+                "60",
+                "-video_track_timescale",
+                "282240000",
             ])
             .arg(&black)
             .output()?;
@@ -518,16 +625,16 @@ pub fn prepare_preview(rt: &Runtime, p: &Project, cancel: &AtomicBool) -> Result
     let mut cursor = 0;
     for c in p.lane(0) {
         if c.start > cursor {
-            video += &gap_entries(&black, c.start - cursor);
+            video += &gap_entries(&black, c.start - cursor, HZ * 10);
         }
-        video += &entry(&p.media(&c.media)?.path, c.source_in, c.duration);
+        let media = p.media(&c.media)?;
+        let cache = video_cache(rt, media, p.fps, cancel, |n| progress(&media.name, n))?;
+        video += &entry(&cache, c.source_in, c.duration);
         cursor = c.end();
     }
     if cursor < p.duration() {
-        video += &gap_entries(&black, p.duration() - cursor);
+        video += &gap_entries(&black, p.duration() - cursor, HZ * 10);
     }
-    let video_path = rt.cache.join(format!("preview-video-{}.edl", id()));
-    fs::write(&video_path, &video)?;
     let mut combined = video;
     let mut graph = String::from("[vid1]null[vo];");
     let mut names = String::new();
@@ -536,19 +643,19 @@ pub fn prepare_preview(rt: &Runtime, p: &Project, cancel: &AtomicBool) -> Result
         cursor = 0;
         for c in p.lane(lane) {
             if c.start > cursor {
-                combined += &gap_entries(&silence, c.start - cursor);
+                combined += &gap_entries(&silence, c.start - cursor, HZ * 3600);
             }
             let m = p.media(&c.media)?;
             if m.audio.is_some() && !c.mute && !p.tracks[lane].mute {
                 let audio = audio_cache(rt, m, c, cancel)?;
                 combined += &entry(&audio, 0, c.duration);
             } else {
-                combined += &gap_entries(&silence, c.duration);
+                combined += &gap_entries(&silence, c.duration, HZ * 3600);
             }
             cursor = c.end();
         }
         if cursor < p.duration() {
-            combined += &gap_entries(&silence, p.duration() - cursor);
+            combined += &gap_entries(&silence, p.duration() - cursor, HZ * 3600);
         }
         graph += &format!(
             "[aid{}]aresample=48000,aformat=sample_fmts=flt:channel_layouts=stereo,volume={:.12}[a{lane}];",
@@ -568,7 +675,6 @@ pub fn prepare_preview(rt: &Runtime, p: &Project, cancel: &AtomicBool) -> Result
     let combined_path = rt.cache.join(format!("preview-{}.edl", id()));
     fs::write(&combined_path, combined)?;
     Ok(PreviewPlan {
-        video: video_path,
         combined: combined_path,
         graph,
     })

@@ -225,6 +225,10 @@ fn actual_cut_mix_export_save_reopen_and_preview() {
     player.toggle();
     std::thread::sleep(Duration::from_millis(700));
     assert!(player.snapshot().position > HZ / 2);
+    assert!(
+        player.snapshot().peak_db.into_iter().any(|n| n > -60.),
+        "Meters must read actual decoded audio"
+    );
     player.pause();
     player.seek(HZ * 4);
     std::thread::sleep(Duration::from_millis(500));
@@ -248,7 +252,10 @@ fn actual_cut_mix_export_save_reopen_and_preview() {
     println!(
         "Preview capture: {:.3}s, {:?} loaded={} paused={} frames={}",
         seconds(capture.snapshot().position),
-        capture.snapshot().error,capture.snapshot().loaded,capture.snapshot().paused,capture.snapshot().frames
+        capture.snapshot().error,
+        capture.snapshot().loaded,
+        capture.snapshot().paused,
+        capture.snapshot().frames
     );
     drop(capture);
     for position in [0.5, 1.5, 3.5, 5.5] {

@@ -17,9 +17,17 @@ Preview compiles disposable EDLs; EDL is never authoritative project storage.
 Audio clips are cached as stereo float PCM using the same resample/gain/fade filters
 as export. Only changed clips need rebuilding. Three audio EDL lanes are mixed by
 libavfilter in mpv using the same track gain, summation and peak protection as export.
-Playback waits for a changed mix to prepare; the UI and video seeking remain usable.
+Playback waits for changed caches to prepare; the UI remains usable.
 This avoids disk or decode work in an application audio callback. Cache latency is a
 known tradeoff to measure with the acceptance workload.
+
+The VFR covering-frame regression showed that libmpv's EDL demuxer discards a
+frame beginning before a cut even if it covers the cut. Decoder options and a
+post-EDL filter cannot restore that discarded frame. Therefore each video source
+is normalized once to a project-frame-aligned 960×540 playback cache, using the
+same timestamp sampling rule as export. All subsequent edits reuse it. This
+costs initial preparation time and disk space, but avoids a process per seek and
+keeps edit semantics correct. Export always reads full-resolution originals.
 
 ## Timing and persistence
 Integer ticks at 282,240,000 Hz represent ordinary broadcast frame rates and 44.1/48

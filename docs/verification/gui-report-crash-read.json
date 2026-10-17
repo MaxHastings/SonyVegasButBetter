@@ -1,0 +1,14 @@
+{
+  "clips": 17,
+  "duration_seconds": 230.0,
+  "elapsed_seconds": 0.2386942,
+  "events": [
+    "0: Click(Named(\"recover\")); clips=0 selected=None media=None",
+    "1: Wait(\"opened\"); clips=17 selected=None media=None",
+    "2: Assert(\"recovered\"); clips=17 selected=None media=None"
+  ],
+  "passed": true,
+  "stage": "crash-read",
+  "steps": 3,
+  "verified": "Native eframe window; egui raw pointer/keyboard/drop events; live media adapters; real save and export"
+}

@@ -125,11 +125,11 @@ impl Api {
             if (self.get)(
                 h,
                 c"af-metadata/meter".as_ptr(),
-                7,
+                6,
                 (&mut node as *mut Node).cast(),
             ) >= 0
             {
-                if node.format == 9 && !node.value.list.is_null() {
+                if node.format == 8 && !node.value.list.is_null() {
                     let list = &*node.value.list;
                     if list.count >= 0
                         && list.count <= 1024
@@ -196,6 +196,9 @@ impl Player {
     pub fn new(rt: &Runtime) -> Result<Self> {
         Self::with_options(rt, vec![])
     }
+    pub fn diagnostic(rt: &Runtime, log: &std::path::Path) -> Result<Self> {
+        Self::with_options(rt, vec![("log-file".into(), log.to_string_lossy().into())])
+    }
     /// Integration tests capture the actual preview audio adapter independently
     /// of the offline exporter, to detect divergence in shared mix semantics.
     pub fn capture(rt: &Runtime, path: &std::path::Path) -> Result<Self> {
@@ -206,7 +209,10 @@ impl Player {
                 ("ao-pcm-file".into(), path.to_string_lossy().into()),
                 ("audio-samplerate".into(), "48000".into()),
                 ("audio-format".into(), "float".into()),
-                ("log-file".into(),path.with_extension("log").to_string_lossy().into()),
+                (
+                    "log-file".into(),
+                    path.with_extension("log").to_string_lossy().into(),
+                ),
             ],
         )
     }
@@ -248,6 +254,7 @@ impl Player {
                     ("audio-file-auto", "no"),
                     ("sub-auto", "no"),
                     ("vd-lavc-threads", "4"),
+                    ("hr-seek-framedrop", "no"),
                     (
                         "af",
                         "@meter:astats=metadata=1:reset=1:measure_overall=none",

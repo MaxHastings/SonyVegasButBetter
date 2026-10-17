@@ -1,0 +1,14 @@
+{
+  "adapter_initialize_and_load_ms": 43.3026,
+  "preview": "960x540 software render, persistent libmpv; excludes UI texture upload",
+  "rendered_fps_over_four_seconds": 59.24702283710244,
+  "seek_ms": [
+    68.4374,
+    18.9684,
+    18.8237,
+    14.8438,
+    12.5541
+  ],
+  "source": "1080p60 synthetic ten-minute recording, ten-second tail clip",
+  "warm_preview_prepare_ms": 0.8331000000000001
+}

@@ -1,0 +1,397 @@
+name	version	SPDX	repository	notices
+ab_glyph	0.2.32	Apache-2.0	https://github.com/alexheretic/ab-glyph	LICENSE
+ab_glyph_rasterizer	0.1.10	Apache-2.0	https://github.com/alexheretic/ab-glyph	LICENSE
+adler2	2.0.1	0BSD OR MIT OR Apache-2.0	https://github.com/oyvindln/adler2	LICENSE-0BSD, LICENSE-APACHE, LICENSE-MIT
+ahash	0.8.12	MIT OR Apache-2.0	https://github.com/tkaitchuck/ahash	LICENSE-APACHE, LICENSE-MIT
+android-activity	0.6.1	MIT OR Apache-2.0	https://github.com/rust-mobile/android-activity	LICENSE, LICENSE-APACHE, LICENSE-MIT
+android-properties	0.2.2	MIT	https://github.com/miklelappo/android-properties	LICENSE
+android_system_properties	0.1.6	MIT OR Apache-2.0	https://github.com/nical/android_system_properties	LICENSE-APACHE, LICENSE-MIT
+anyhow	1.0.104	MIT OR Apache-2.0	https://github.com/dtolnay/anyhow	LICENSE-APACHE, LICENSE-MIT
+arboard	3.7.0	MIT OR Apache-2.0	https://github.com/1Password/arboard	LICENSE-APACHE.txt, LICENSE-MIT.txt
+arrayvec	0.7.8	MIT OR Apache-2.0	https://github.com/bluss/arrayvec	LICENSE-APACHE, LICENSE-MIT
+as-raw-xcb-connection	1.0.1	MIT OR Apache-2.0	https://github.com/psychon/as-raw-xcb-connection	LICENSE-APACHE, LICENSE-MIT
+ash	0.38.0+1.3.281	MIT OR Apache-2.0	https://github.com/ash-rs/ash	LICENSE-APACHE, LICENSE-MIT
+ashpd	0.11.1	MIT	https://github.com/bilelmoussaoui/ashpd	LICENSE
+async-broadcast	0.7.2	MIT OR Apache-2.0	https://github.com/smol-rs/async-broadcast	LICENSE-APACHE, LICENSE-MIT
+async-channel	2.5.0	Apache-2.0 OR MIT	https://github.com/smol-rs/async-channel	LICENSE-APACHE, LICENSE-MIT
+async-executor	1.14.0	Apache-2.0 OR MIT	https://github.com/smol-rs/async-executor	LICENSE-APACHE, LICENSE-MIT
+async-fs	2.2.0	Apache-2.0 OR MIT	https://github.com/smol-rs/async-fs	LICENSE-APACHE, LICENSE-MIT
+async-io	2.6.0	Apache-2.0 OR MIT	https://github.com/smol-rs/async-io	LICENSE-APACHE, LICENSE-MIT
+async-lock	3.4.2	Apache-2.0 OR MIT	https://github.com/smol-rs/async-lock	LICENSE-APACHE, LICENSE-MIT
+async-net	2.0.0	Apache-2.0 OR MIT	https://github.com/smol-rs/async-net	LICENSE-APACHE, LICENSE-MIT
+async-process	2.5.0	Apache-2.0 OR MIT	https://github.com/smol-rs/async-process	LICENSE-APACHE, LICENSE-MIT
+async-recursion	1.2.0	MIT OR Apache-2.0	https://github.com/dcchut/async-recursion	LICENSE-APACHE, LICENSE-MIT
+async-signal	0.2.14	Apache-2.0 OR MIT	https://github.com/smol-rs/async-signal	LICENSE-APACHE, LICENSE-MIT
+async-task	4.7.1	Apache-2.0 OR MIT	https://github.com/smol-rs/async-task	LICENSE-APACHE, LICENSE-MIT
+async-trait	0.1.92	MIT OR Apache-2.0	https://github.com/dtolnay/async-trait	LICENSE-APACHE, LICENSE-MIT
+atomic-waker	1.1.2	Apache-2.0 OR MIT	https://github.com/smol-rs/atomic-waker	LICENSE-APACHE, LICENSE-MIT, LICENSE-THIRD-PARTY
+autocfg	1.5.1	Apache-2.0 OR MIT	https://github.com/cuviper/autocfg	LICENSE-APACHE, LICENSE-MIT
+bit-set	0.8.0	Apache-2.0 OR MIT	https://github.com/contain-rs/bit-set	LICENSE-APACHE, LICENSE-MIT
+bit-vec	0.8.0	Apache-2.0 OR MIT	https://github.com/contain-rs/bit-vec	LICENSE-APACHE, LICENSE-MIT
+bitflags	1.3.2	MIT/Apache-2.0	https://github.com/bitflags/bitflags	LICENSE-APACHE, LICENSE-MIT
+bitflags	2.13.2	MIT OR Apache-2.0	https://github.com/bitflags/bitflags	LICENSE-APACHE, LICENSE-MIT
+block	0.1.6	MIT	http://github.com/SSheldon/rust-block	
+block-buffer	0.10.4	MIT OR Apache-2.0	https://github.com/RustCrypto/utils	LICENSE-APACHE, LICENSE-MIT
+block2	0.5.1	MIT	https://github.com/madsmtm/objc2	
+block2	0.6.2	MIT	https://github.com/madsmtm/objc2	
+blocking	1.7.0	Apache-2.0 OR MIT	https://github.com/smol-rs/blocking	LICENSE-APACHE, LICENSE-MIT
+bumpalo	3.20.3	MIT OR Apache-2.0	https://github.com/fitzgen/bumpalo	LICENSE-APACHE, LICENSE-MIT
+bytemuck	1.25.2	Zlib OR Apache-2.0 OR MIT	https://github.com/Lokathor/bytemuck	LICENSE-APACHE, LICENSE-MIT, LICENSE-ZLIB
+bytemuck_derive	1.12.1	Zlib OR Apache-2.0 OR MIT	https://github.com/Lokathor/bytemuck	LICENSE-APACHE, LICENSE-MIT, LICENSE-ZLIB
+byteorder-lite	0.1.0	Unlicense OR MIT	https://github.com/image-rs/byteorder-lite	LICENSE-MIT
+bytes	1.12.1	MIT	https://github.com/tokio-rs/bytes	LICENSE
+calloop	0.13.0	MIT	https://github.com/Smithay/calloop	LICENSE.txt
+calloop	0.14.5	MIT	https://github.com/Smithay/calloop	LICENSE.txt
+calloop-wayland-source	0.3.0	MIT	https://github.com/smithay/calloop-wayland-source	LICENSE.txt
+calloop-wayland-source	0.4.1	MIT	https://github.com/smithay/calloop-wayland-source	LICENSE.txt
+cc	1.8.0	MIT OR Apache-2.0	https://github.com/rust-lang/cc-rs	LICENSE-APACHE, LICENSE-MIT
+cfg-if	1.0.5	MIT OR Apache-2.0	https://github.com/rust-lang/cfg-if	LICENSE-APACHE, LICENSE-MIT
+cfg_aliases	0.2.2	MIT	https://github.com/katharostech/cfg_aliases	LICENSE, NOTICES.md
+cgl	0.3.2	MIT / Apache-2.0	https://github.com/servo/cgl-rs	COPYING, LICENSE-APACHE, LICENSE-MIT
+clipboard-win	5.4.1	BSL-1.0	https://github.com/DoumanAsh/clipboard-win	
+codespan-reporting	0.11.1	Apache-2.0	https://github.com/brendanzab/codespan	
+combine	4.6.9	MIT	https://github.com/Marwes/combine	LICENSE
+concurrent-queue	2.5.0	Apache-2.0 OR MIT	https://github.com/smol-rs/concurrent-queue	LICENSE-APACHE, LICENSE-MIT
+core-foundation	0.9.4	MIT OR Apache-2.0	https://github.com/servo/core-foundation-rs	LICENSE-APACHE, LICENSE-MIT
+core-foundation-sys	0.8.7	MIT OR Apache-2.0	https://github.com/servo/core-foundation-rs	LICENSE-APACHE, LICENSE-MIT
+core-graphics	0.23.2	MIT OR Apache-2.0	https://github.com/servo/core-foundation-rs	LICENSE-APACHE, LICENSE-MIT
+core-graphics-types	0.1.3	MIT OR Apache-2.0	https://github.com/servo/core-foundation-rs	LICENSE-APACHE, LICENSE-MIT
+cpufeatures	0.2.17	MIT OR Apache-2.0	https://github.com/RustCrypto/utils	LICENSE-APACHE, LICENSE-MIT
+crc32fast	1.5.2	MIT OR Apache-2.0	https://github.com/srijs/rust-crc32fast	LICENSE-APACHE, LICENSE-MIT
+crossbeam-utils	0.8.23	MIT OR Apache-2.0	https://github.com/crossbeam-rs/crossbeam	LICENSE-APACHE, LICENSE-MIT
+crunchy	0.2.4	MIT	https://github.com/eira-fransham/crunchy	LICENSE
+crypto-common	0.1.7	MIT OR Apache-2.0	https://github.com/RustCrypto/traits	LICENSE-APACHE, LICENSE-MIT
+cursor-icon	1.2.0	MIT OR Apache-2.0 OR Zlib	https://github.com/rust-windowing/cursor-icon	LICENSE-APACHE, LICENSE-MIT, LICENSE-ZLIB
+digest	0.10.7	MIT OR Apache-2.0	https://github.com/RustCrypto/traits	LICENSE-APACHE, LICENSE-MIT
+dispatch	0.2.0	MIT	http://github.com/SSheldon/rust-dispatch	
+dispatch2	0.3.1	Zlib OR Apache-2.0 OR MIT	https://github.com/madsmtm/objc2	
+displaydoc	0.2.7	MIT OR Apache-2.0	https://github.com/yaahc/displaydoc	LICENSE-APACHE, LICENSE-MIT
+dlib	0.5.3	MIT	https://github.com/elinorbgr/dlib	LICENSE.txt
+document-features	0.2.12	MIT OR Apache-2.0	https://github.com/slint-ui/document-features	LICENSE-APACHE, LICENSE-MIT
+downcast-rs	1.2.1	MIT/Apache-2.0	https://github.com/marcianx/downcast-rs	LICENSE-APACHE, LICENSE-MIT
+dpi	0.1.2	Apache-2.0 AND MIT	https://github.com/rust-windowing/winit	LICENSE, LICENSE-LIBM-MIT
+ecolor	0.31.1	MIT OR Apache-2.0	https://github.com/emilk/egui	
+eframe	0.31.1	MIT OR Apache-2.0	https://github.com/emilk/egui/tree/master/crates/eframe	
+egui	0.31.1	MIT OR Apache-2.0	https://github.com/emilk/egui	
+egui-wgpu	0.31.1	MIT OR Apache-2.0	https://github.com/emilk/egui/tree/master/crates/egui-wgpu	
+egui-winit	0.31.1	MIT OR Apache-2.0	https://github.com/emilk/egui/tree/master/crates/egui-winit	
+egui_glow	0.31.1	MIT OR Apache-2.0	https://github.com/emilk/egui/tree/master/crates/egui_glow	
+emath	0.31.1	MIT OR Apache-2.0	https://github.com/emilk/egui/tree/master/crates/emath	
+endi	1.1.1	MIT	https://github.com/zeenix/endi	LICENSE-MIT
+enumflags2	0.7.12	MIT OR Apache-2.0	https://github.com/meithecatte/enumflags2	LICENSE-APACHE, LICENSE-MIT
+enumflags2_derive	0.7.12	MIT OR Apache-2.0	https://github.com/meithecatte/enumflags2	LICENSE-APACHE, LICENSE-MIT
+epaint	0.31.1	MIT OR Apache-2.0	https://github.com/emilk/egui/tree/master/crates/epaint	
+epaint_default_fonts	0.31.1	(MIT OR Apache-2.0) AND OFL-1.1 AND Ubuntu-font-1.0	https://github.com/emilk/egui/tree/master/crates/epaint_default_fonts	fonts\OFL.txt
+equivalent	1.0.3	Apache-2.0 OR MIT	https://github.com/indexmap-rs/equivalent	LICENSE-APACHE, LICENSE-MIT
+errno	0.3.14	MIT OR Apache-2.0	https://github.com/lambda-fairy/rust-errno	LICENSE-APACHE, LICENSE-MIT
+error-code	3.4.0	BSL-1.0	https://github.com/DoumanAsh/error-code	LICENSE
+event-listener	5.4.2	Apache-2.0 OR MIT	https://github.com/smol-rs/event-listener	LICENSE-APACHE, LICENSE-MIT
+event-listener-strategy	0.5.4	Apache-2.0 OR MIT	https://github.com/smol-rs/event-listener-strategy	LICENSE-APACHE, LICENSE-MIT
+fallible-iterator	0.3.0	MIT/Apache-2.0	https://github.com/sfackler/rust-fallible-iterator	LICENSE-APACHE, LICENSE-MIT
+fallible-streaming-iterator	0.1.9	MIT/Apache-2.0	https://github.com/sfackler/fallible-streaming-iterator	LICENSE-APACHE, LICENSE-MIT
+fastrand	2.5.0	Apache-2.0 OR MIT	https://github.com/smol-rs/fastrand	LICENSE-APACHE, LICENSE-MIT
+fax	0.2.7	MIT	https://github.com/pdf-rs/fax	LICENSE
+fdeflate	0.3.7	MIT OR Apache-2.0	https://github.com/image-rs/fdeflate	LICENSE-APACHE, LICENSE-MIT
+find-msvc-tools	0.1.14	MIT OR Apache-2.0	https://github.com/rust-lang/cc-rs	LICENSE-APACHE, LICENSE-MIT
+flate2	1.1.10	MIT OR Apache-2.0	https://github.com/rust-lang/flate2-rs	LICENSE-APACHE, LICENSE-MIT
+fnv	1.0.7	Apache-2.0 / MIT	https://github.com/servo/rust-fnv	LICENSE-APACHE, LICENSE-MIT
+foldhash	0.1.5	Zlib	https://github.com/orlp/foldhash	LICENSE
+foreign-types	0.5.0	MIT/Apache-2.0	https://github.com/sfackler/foreign-types	LICENSE-APACHE, LICENSE-MIT
+foreign-types-macros	0.2.4	MIT/Apache-2.0	https://github.com/sfackler/foreign-types	LICENSE-APACHE, LICENSE-MIT
+foreign-types-shared	0.3.1	MIT/Apache-2.0	https://github.com/sfackler/foreign-types	LICENSE-APACHE, LICENSE-MIT
+form_urlencoded	1.2.2	MIT OR Apache-2.0	https://github.com/servo/rust-url	LICENSE-APACHE, LICENSE-MIT
+futures-channel	0.3.34	MIT OR Apache-2.0	https://github.com/rust-lang/futures-rs	LICENSE-APACHE, LICENSE-MIT
+futures-core	0.3.34	MIT OR Apache-2.0	https://github.com/rust-lang/futures-rs	LICENSE-APACHE, LICENSE-MIT
+futures-io	0.3.34	MIT OR Apache-2.0	https://github.com/rust-lang/futures-rs	LICENSE-APACHE, LICENSE-MIT
+futures-lite	2.6.1	Apache-2.0 OR MIT	https://github.com/smol-rs/futures-lite	LICENSE-APACHE, LICENSE-MIT, LICENSE-THIRD-PARTY
+futures-macro	0.3.34	MIT OR Apache-2.0	https://github.com/rust-lang/futures-rs	LICENSE-APACHE, LICENSE-MIT
+futures-task	0.3.34	MIT OR Apache-2.0	https://github.com/rust-lang/futures-rs	LICENSE-APACHE, LICENSE-MIT
+futures-util	0.3.34	MIT OR Apache-2.0	https://github.com/rust-lang/futures-rs	LICENSE-APACHE, LICENSE-MIT
+generic-array	0.14.7	MIT	https://github.com/fizyk20/generic-array.git	LICENSE
+gethostname	1.1.0	Apache-2.0	https://codeberg.org/swsnr/gethostname.rs.git	LICENSE
+getrandom	0.3.4	MIT OR Apache-2.0	https://github.com/rust-random/getrandom	LICENSE-APACHE, LICENSE-MIT
+getrandom	0.4.3	MIT OR Apache-2.0	https://github.com/rust-random/getrandom	LICENSE-APACHE, LICENSE-MIT
+gl_generator	0.14.0	Apache-2.0	https://github.com/brendanzab/gl-rs/	
+glow	0.16.0	MIT OR Apache-2.0 OR Zlib	https://github.com/grovesNL/glow	LICENSE-APACHE, LICENSE-MIT, LICENSE-ZLIB
+glutin	0.32.3	Apache-2.0	https://github.com/rust-windowing/glutin	LICENSE
+glutin-winit	0.5.0	MIT	https://github.com/rust-windowing/glutin	LICENSE
+glutin_egl_sys	0.7.1	Apache-2.0	https://github.com/rust-windowing/glutin	LICENSE
+glutin_glx_sys	0.6.1	Apache-2.0	https://github.com/rust-windowing/glutin	LICENSE
+glutin_wgl_sys	0.6.1	Apache-2.0	https://github.com/rust-windowing/glutin	LICENSE
+gpu-alloc	0.6.2	MIT OR Apache-2.0	https://github.com/zakarumych/gpu-alloc	
+gpu-alloc-types	0.3.1	MIT OR Apache-2.0	https://github.com/zakarumych/gpu-alloc	
+gpu-descriptor	0.3.2	MIT OR Apache-2.0	https://github.com/zakarumych/gpu-descriptor	
+gpu-descriptor-types	0.2.0	MIT OR Apache-2.0	https://github.com/zakarumych/gpu-descriptor	
+half	2.7.1	MIT OR Apache-2.0	https://github.com/VoidStarKat/half-rs	LICENSE-APACHE, LICENSE-MIT
+hashbrown	0.14.5	MIT OR Apache-2.0	https://github.com/rust-lang/hashbrown	LICENSE-APACHE, LICENSE-MIT
+hashbrown	0.15.5	MIT OR Apache-2.0	https://github.com/rust-lang/hashbrown	LICENSE-APACHE, LICENSE-MIT
+hashbrown	0.17.1	MIT OR Apache-2.0	https://github.com/rust-lang/hashbrown	LICENSE-APACHE, LICENSE-MIT
+hashlink	0.9.1	MIT OR Apache-2.0	https://github.com/kyren/hashlink	LICENSE-APACHE, LICENSE-MIT
+heck	0.5.0	MIT OR Apache-2.0	https://github.com/withoutboats/heck	LICENSE-APACHE, LICENSE-MIT
+hermit-abi	0.5.3	MIT OR Apache-2.0	https://github.com/hermit-os/hermit-rs	LICENSE-APACHE, LICENSE-MIT
+hex	0.4.3	MIT OR Apache-2.0	https://github.com/KokaKiwi/rust-hex	LICENSE-APACHE, LICENSE-MIT
+hexf-parse	0.2.1	CC0-1.0	https://github.com/lifthrasiir/hexf	
+icu_collections	2.3.0	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+icu_locale_core	2.3.0	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+icu_normalizer	2.3.0	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+icu_normalizer_data	2.3.0	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+icu_properties	2.3.0	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+icu_properties_data	2.3.0	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+icu_provider	2.3.1	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+idna	1.1.0	MIT OR Apache-2.0	https://github.com/servo/rust-url/	LICENSE-APACHE, LICENSE-MIT
+idna_adapter	1.2.2	Apache-2.0 OR MIT	https://github.com/hsivonen/idna_adapter	LICENSE-APACHE, LICENSE-MIT
+image	0.25.10	MIT OR Apache-2.0	https://github.com/image-rs/image	LICENSE-APACHE, LICENSE-MIT
+indexmap	2.14.2	Apache-2.0 OR MIT	https://github.com/indexmap-rs/indexmap	LICENSE-APACHE, LICENSE-MIT
+itoa	1.0.18	MIT OR Apache-2.0	https://github.com/dtolnay/itoa	LICENSE-APACHE, LICENSE-MIT
+jni	0.22.4	MIT OR Apache-2.0	https://github.com/jni-rs/jni-rs	
+jni-macros	0.22.4	MIT OR Apache-2.0	https://github.com/jni-rs/jni-rs	
+jni-sys	0.3.1	MIT OR Apache-2.0	https://github.com/jni-rs/jni-sys	LICENSE-APACHE, LICENSE-MIT
+jni-sys	0.4.1	MIT OR Apache-2.0	https://github.com/jni-rs/jni-sys	LICENSE-APACHE, LICENSE-MIT
+jni-sys-macros	0.4.1	MIT OR Apache-2.0	https://github.com/jni-rs/jni-sys	
+jobserver	0.1.35	MIT OR Apache-2.0	https://github.com/rust-lang/jobserver-rs	LICENSE-APACHE, LICENSE-MIT
+js-sys	0.3.106	MIT OR Apache-2.0	https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/js-sys	LICENSE-APACHE, LICENSE-MIT
+khronos-egl	6.0.0	MIT/Apache-2.0	https://github.com/timothee-haudebourg/khronos-egl	LICENSE-APACHE, LICENSE-MIT
+khronos_api	3.1.0	Apache-2.0	https://github.com/brendanzab/gl-rs/	
+libc	0.2.191	MIT OR Apache-2.0	https://github.com/rust-lang/libc	LICENSE-APACHE, LICENSE-MIT
+libloading	0.8.9	ISC	https://github.com/nagisa/rust_libloading/	LICENSE
+libredox	0.1.25	MIT	https://gitlab.redox-os.org/redox-os/libredox.git	LICENSE
+libsqlite3-sys	0.30.1	MIT	https://github.com/rusqlite/rusqlite	LICENSE, sqlcipher\LICENSE
+linux-raw-sys	0.12.1	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	https://github.com/sunfishcode/linux-raw-sys	LICENSE-APACHE, LICENSE-Apache-2.0_WITH_LLVM-exception, LICENSE-MIT
+linux-raw-sys	0.4.15	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	https://github.com/sunfishcode/linux-raw-sys	LICENSE-APACHE, LICENSE-Apache-2.0_WITH_LLVM-exception, LICENSE-MIT
+litemap	0.8.3	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+litrs	1.0.1	MIT OR Apache-2.0	https://github.com/LukasKalbertodt/litrs	LICENSE-APACHE, LICENSE-MIT
+lock_api	0.4.14	MIT OR Apache-2.0	https://github.com/Amanieu/parking_lot	LICENSE-APACHE, LICENSE-MIT
+log	0.4.34	MIT OR Apache-2.0	https://github.com/rust-lang/log	LICENSE-APACHE, LICENSE-MIT
+malloc_buf	0.0.6	MIT	https://github.com/SSheldon/malloc_buf	
+memchr	2.8.3	Unlicense OR MIT	https://github.com/BurntSushi/memchr	COPYING, LICENSE-MIT
+memmap2	0.9.11	MIT OR Apache-2.0	https://github.com/RazrFalcon/memmap2-rs	LICENSE-APACHE, LICENSE-MIT
+memoffset	0.9.1	MIT	https://github.com/Gilnaa/memoffset	LICENSE
+metal	0.31.0	MIT OR Apache-2.0	https://github.com/gfx-rs/metal-rs	LICENSE-APACHE, LICENSE-MIT
+miniz_oxide	0.8.9	MIT OR Zlib OR Apache-2.0	https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide	LICENSE, LICENSE-APACHE.md, LICENSE-MIT.md, LICENSE-ZLIB.md
+miniz_oxide	0.9.1	MIT OR Zlib OR Apache-2.0	https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide	LICENSE, LICENSE-APACHE.md, LICENSE-MIT.md, LICENSE-ZLIB.md
+moxcms	0.8.1	BSD-3-Clause OR Apache-2.0	https://github.com/awxkee/moxcms.git	LICENSE-APACHE.md, LICENSE.md
+naga	24.0.0	MIT OR Apache-2.0	https://github.com/gfx-rs/wgpu/tree/trunk/naga	
+ndk	0.9.0	MIT OR Apache-2.0	https://github.com/rust-mobile/ndk	
+ndk-context	0.1.1	MIT OR Apache-2.0	https://github.com/rust-windowing/android-ndk-rs	
+ndk-sys	0.5.0+25.2.9519653	MIT OR Apache-2.0	https://github.com/rust-mobile/ndk	
+ndk-sys	0.6.0+11769913	MIT OR Apache-2.0	https://github.com/rust-mobile/ndk	
+nohash-hasher	0.2.0	Apache-2.0 OR MIT	https://github.com/paritytech/nohash-hasher	LICENSE-APACHE, LICENSE-MIT
+num-traits	0.2.19	MIT OR Apache-2.0	https://github.com/rust-num/num-traits	LICENSE-APACHE, LICENSE-MIT
+num_enum	0.7.6	BSD-3-Clause OR MIT OR Apache-2.0	https://github.com/illicitonion/num_enum	LICENSE-APACHE, LICENSE-BSD, LICENSE-MIT
+num_enum_derive	0.7.6	BSD-3-Clause OR MIT OR Apache-2.0	https://github.com/illicitonion/num_enum	LICENSE-APACHE, LICENSE-BSD, LICENSE-MIT
+objc	0.2.7	MIT	http://github.com/SSheldon/rust-objc	LICENSE.txt
+objc-sys	0.3.5	MIT	https://github.com/madsmtm/objc2	
+objc2	0.5.3	MIT	https://github.com/madsmtm/objc2	
+objc2	0.6.5	MIT	https://github.com/madsmtm/objc2	
+objc2-app-kit	0.2.2	MIT	https://github.com/madsmtm/objc2	
+objc2-app-kit	0.3.2	Zlib OR Apache-2.0 OR MIT	https://github.com/madsmtm/objc2	
+objc2-cloud-kit	0.2.2	MIT	https://github.com/madsmtm/objc2	
+objc2-contacts	0.2.2	MIT	https://github.com/madsmtm/objc2	
+objc2-core-data	0.2.2	MIT	https://github.com/madsmtm/objc2	
+objc2-core-foundation	0.3.2	Zlib OR Apache-2.0 OR MIT	https://github.com/madsmtm/objc2	
+objc2-core-graphics	0.3.2	Zlib OR Apache-2.0 OR MIT	https://github.com/madsmtm/objc2	
+objc2-core-image	0.2.2	MIT	https://github.com/madsmtm/objc2	
+objc2-core-location	0.2.2	MIT	https://github.com/madsmtm/objc2	
+objc2-encode	4.1.0	MIT	https://github.com/madsmtm/objc2	
+objc2-foundation	0.2.2	MIT	https://github.com/madsmtm/objc2	src\copying.rs, src\tests\copying.rs
+objc2-foundation	0.3.2	MIT	https://github.com/madsmtm/objc2	src\copying.rs, src\tests\copying.rs
+objc2-io-surface	0.3.2	Zlib OR Apache-2.0 OR MIT	https://github.com/madsmtm/objc2	
+objc2-link-presentation	0.2.2	MIT	https://github.com/madsmtm/objc2	
+objc2-metal	0.2.2	MIT	https://github.com/madsmtm/objc2	
+objc2-quartz-core	0.2.2	MIT	https://github.com/madsmtm/objc2	
+objc2-symbols	0.2.2	MIT	https://github.com/madsmtm/objc2	
+objc2-ui-kit	0.2.2	MIT	https://github.com/madsmtm/objc2	
+objc2-uniform-type-identifiers	0.2.2	MIT	https://github.com/madsmtm/objc2	
+objc2-user-notifications	0.2.2	MIT	https://github.com/madsmtm/objc2	
+once_cell	1.21.4	MIT OR Apache-2.0	https://github.com/matklad/once_cell	LICENSE-APACHE, LICENSE-MIT
+orbclient	0.3.55	MIT	https://gitlab.redox-os.org/redox-os/orbclient	LICENSE
+ordered-float	4.6.0	MIT	https://github.com/reem/rust-ordered-float	LICENSE-MIT
+ordered-stream	0.2.0	MIT OR Apache-2.0	https://github.com/danieldg/ordered-stream	LICENSE-APACHE, LICENSE-MIT
+owned_ttf_parser	0.25.1	Apache-2.0	https://github.com/alexheretic/owned-ttf-parser	LICENSE
+parking	2.2.1	Apache-2.0 OR MIT	https://github.com/smol-rs/parking	LICENSE-APACHE, LICENSE-MIT, LICENSE-THIRD-PARTY
+parking_lot	0.12.5	MIT OR Apache-2.0	https://github.com/Amanieu/parking_lot	LICENSE-APACHE, LICENSE-MIT
+parking_lot_core	0.9.12	MIT OR Apache-2.0	https://github.com/Amanieu/parking_lot	LICENSE-APACHE, LICENSE-MIT
+paste	1.0.15	MIT OR Apache-2.0	https://github.com/dtolnay/paste	LICENSE-APACHE, LICENSE-MIT
+percent-encoding	2.3.2	MIT OR Apache-2.0	https://github.com/servo/rust-url/	LICENSE-APACHE, LICENSE-MIT
+pin-project	1.1.13	Apache-2.0 OR MIT	https://github.com/taiki-e/pin-project	LICENSE-APACHE, LICENSE-MIT
+pin-project-internal	1.1.13	Apache-2.0 OR MIT	https://github.com/taiki-e/pin-project	LICENSE-APACHE, LICENSE-MIT
+pin-project-lite	0.2.17	Apache-2.0 OR MIT	https://github.com/taiki-e/pin-project-lite	LICENSE-APACHE, LICENSE-MIT
+piper	0.2.5	MIT OR Apache-2.0	https://github.com/smol-rs/piper	LICENSE-APACHE, LICENSE-MIT
+pkg-config	0.3.34	MIT OR Apache-2.0	https://github.com/rust-lang/pkg-config-rs	LICENSE-APACHE, LICENSE-MIT
+plain	0.2.3	MIT/Apache-2.0	https://github.com/randomites/plain	LICENSE-APACHE, LICENSE-MIT
+png	0.18.1	MIT OR Apache-2.0	https://github.com/image-rs/image-png	LICENSE-APACHE, LICENSE-MIT
+polling	3.11.0	Apache-2.0 OR MIT	https://github.com/smol-rs/polling	LICENSE-APACHE, LICENSE-MIT
+pollster	0.4.0	Apache-2.0/MIT	https://github.com/zesterer/pollster	LICENSE-APACHE, LICENSE-MIT
+potential_utf	0.1.6	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+ppv-lite86	0.2.21	MIT OR Apache-2.0	https://github.com/cryptocorrosion/cryptocorrosion	LICENSE-APACHE, LICENSE-MIT
+proc-macro-crate	3.5.0	MIT OR Apache-2.0	https://github.com/bkchr/proc-macro-crate	LICENSE-APACHE, LICENSE-MIT
+proc-macro2	1.0.107	MIT OR Apache-2.0	https://github.com/dtolnay/proc-macro2	LICENSE-APACHE, LICENSE-MIT
+profiling	1.0.18	MIT OR Apache-2.0	https://github.com/aclysma/profiling	
+proptest	1.11.0	MIT OR Apache-2.0	https://github.com/proptest-rs/proptest	LICENSE-APACHE, LICENSE-MIT
+pxfm	0.1.30	BSD-3-Clause OR Apache-2.0	https://github.com/awxkee/pxfm	LICENSE-APACHE.md, LICENSE.md
+quick-error	1.2.3	MIT/Apache-2.0	http://github.com/tailhook/quick-error	LICENSE-APACHE, LICENSE-MIT
+quick-error	2.0.1	MIT/Apache-2.0	http://github.com/tailhook/quick-error	LICENSE-APACHE, LICENSE-MIT
+quick-xml	0.41.0	MIT	https://github.com/tafia/quick-xml	LICENSE-MIT.md
+quote	1.0.47	MIT OR Apache-2.0	https://github.com/dtolnay/quote	LICENSE-APACHE, LICENSE-MIT
+r-efi	5.3.0	MIT OR Apache-2.0 OR LGPL-2.1-or-later	https://github.com/r-efi/r-efi	
+r-efi	6.0.0	MIT OR Apache-2.0 OR LGPL-2.1-or-later	https://github.com/r-efi/r-efi	
+rand	0.9.5	MIT OR Apache-2.0	https://github.com/rust-random/rand	LICENSE-APACHE, LICENSE-MIT
+rand_chacha	0.9.0	MIT OR Apache-2.0	https://github.com/rust-random/rand	LICENSE-APACHE, LICENSE-MIT
+rand_core	0.9.5	MIT OR Apache-2.0	https://github.com/rust-random/rand	LICENSE-APACHE, LICENSE-MIT
+rand_xorshift	0.4.0	MIT OR Apache-2.0	https://github.com/rust-random/rngs	LICENSE-APACHE, LICENSE-MIT
+raw-window-handle	0.6.2	MIT OR Apache-2.0 OR Zlib	https://github.com/rust-windowing/raw-window-handle	LICENSE-APACHE.md, LICENSE-MIT.md, LICENSE-ZLIB.md
+redox_syscall	0.4.1	MIT	https://gitlab.redox-os.org/redox-os/syscall	LICENSE
+redox_syscall	0.5.18	MIT	https://gitlab.redox-os.org/redox-os/syscall	LICENSE
+redox_syscall	0.9.5	MIT	https://gitlab.redox-os.org/redox-os/kernel	LICENSE
+regex-syntax	0.8.11	MIT OR Apache-2.0	https://github.com/rust-lang/regex	LICENSE-APACHE, LICENSE-MIT, src\unicode_tables\LICENSE-UNICODE
+renderdoc-sys	1.1.0	MIT OR Apache-2.0	https://github.com/ebkalderon/renderdoc-rs	LICENSE-APACHE, LICENSE-MIT
+rfd	0.15.4	MIT	https://github.com/PolyMeilex/rfd	LICENSE
+rusqlite	0.32.1	MIT	https://github.com/rusqlite/rusqlite	LICENSE
+rustc-hash	1.1.0	Apache-2.0/MIT	https://github.com/rust-lang-nursery/rustc-hash	LICENSE-APACHE, LICENSE-MIT
+rustc-hash	2.1.3	Apache-2.0 OR MIT	https://github.com/rust-lang/rustc-hash	LICENSE-APACHE, LICENSE-MIT
+rustc_version	0.4.1	MIT OR Apache-2.0	https://github.com/djc/rustc-version-rs	LICENSE-APACHE, LICENSE-MIT
+rustix	0.38.44	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	https://github.com/bytecodealliance/rustix	LICENSE-APACHE, LICENSE-Apache-2.0_WITH_LLVM-exception, LICENSE-MIT
+rustix	1.1.5	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	https://github.com/bytecodealliance/rustix	LICENSE-APACHE, LICENSE-Apache-2.0_WITH_LLVM-exception, LICENSE-MIT
+rustversion	1.0.23	MIT OR Apache-2.0	https://github.com/dtolnay/rustversion	LICENSE-APACHE, LICENSE-MIT
+rusty-fork	0.3.1	MIT/Apache-2.0	https://github.com/altsysrq/rusty-fork	LICENSE-APACHE, LICENSE-MIT
+ryu	1.0.23	Apache-2.0 OR BSL-1.0	https://github.com/dtolnay/ryu	LICENSE-APACHE, LICENSE-BOOST
+same-file	1.0.6	Unlicense/MIT	https://github.com/BurntSushi/same-file	COPYING, LICENSE-MIT
+scoped-tls	1.0.1	MIT/Apache-2.0	https://github.com/alexcrichton/scoped-tls	LICENSE-APACHE, LICENSE-MIT
+scopeguard	1.2.0	MIT OR Apache-2.0	https://github.com/bluss/scopeguard	LICENSE-APACHE, LICENSE-MIT
+semver	1.0.28	MIT OR Apache-2.0	https://github.com/dtolnay/semver	LICENSE-APACHE, LICENSE-MIT
+serde	1.0.228	MIT OR Apache-2.0	https://github.com/serde-rs/serde	LICENSE-APACHE, LICENSE-MIT
+serde_core	1.0.228	MIT OR Apache-2.0	https://github.com/serde-rs/serde	LICENSE-APACHE, LICENSE-MIT
+serde_derive	1.0.228	MIT OR Apache-2.0	https://github.com/serde-rs/serde	LICENSE-APACHE, LICENSE-MIT
+serde_json	1.0.145	MIT OR Apache-2.0	https://github.com/serde-rs/json	LICENSE-APACHE, LICENSE-MIT
+serde_repr	0.1.21	MIT OR Apache-2.0	https://github.com/dtolnay/serde-repr	LICENSE-APACHE, LICENSE-MIT
+sha2	0.10.9	MIT OR Apache-2.0	https://github.com/RustCrypto/hashes	LICENSE-APACHE, LICENSE-MIT
+shlex	2.0.1	MIT OR Apache-2.0	https://github.com/comex/rust-shlex	LICENSE-APACHE, LICENSE-MIT
+signal-hook-registry	1.4.8	MIT OR Apache-2.0	https://github.com/vorner/signal-hook	LICENSE-APACHE, LICENSE-MIT
+simd-adler32	0.3.10	MIT	https://github.com/mcountryman/simd-adler32	LICENSE.md
+simd_cesu8	1.2.0	Apache-2.0 OR MIT	https://github.com/seancroach/simd_cesu8	LICENSE-APACHE, LICENSE-MIT
+simdutf8	0.1.5	MIT OR Apache-2.0	https://github.com/rusticstuff/simdutf8	LICENSE-Apache, LICENSE-MIT
+slab	0.4.12	MIT	https://github.com/tokio-rs/slab	LICENSE
+slotmap	1.1.1	Zlib	https://github.com/orlp/slotmap	LICENSE
+smallvec	1.16.3	MIT OR Apache-2.0	https://github.com/servo/rust-smallvec	LICENSE-APACHE, LICENSE-MIT
+smithay-client-toolkit	0.19.2	MIT	https://github.com/smithay/client-toolkit	LICENSE.txt
+smithay-client-toolkit	0.20.0	MIT	https://github.com/smithay/client-toolkit	LICENSE.txt
+smithay-clipboard	0.7.3	MIT	https://github.com/smithay/smithay-clipboard	LICENSE
+smol_str	0.2.2	MIT OR Apache-2.0	https://github.com/rust-analyzer/smol_str	LICENSE-APACHE, LICENSE-MIT
+spirv	0.3.0+sdk-1.3.268.0	Apache-2.0	https://github.com/gfx-rs/rspirv	
+stable_deref_trait	1.2.1	MIT OR Apache-2.0	https://github.com/storyyeller/stable_deref_trait	LICENSE-APACHE, LICENSE-MIT
+static_assertions	1.1.0	MIT OR Apache-2.0	https://github.com/nvzqz/static-assertions-rs	LICENSE-APACHE, LICENSE-MIT
+strum	0.26.3	MIT	https://github.com/Peternator7/strum	LICENSE
+strum_macros	0.26.4	MIT	https://github.com/Peternator7/strum	LICENSE
+syn	2.0.119	MIT OR Apache-2.0	https://github.com/dtolnay/syn	LICENSE-APACHE, LICENSE-MIT
+syn	3.0.9	MIT OR Apache-2.0	https://github.com/dtolnay/syn	LICENSE-APACHE, LICENSE-MIT
+synstructure	0.14.0	MIT	https://github.com/mystor/synstructure	LICENSE
+tempfile	3.20.0	MIT OR Apache-2.0	https://github.com/Stebalien/tempfile	LICENSE-APACHE, LICENSE-MIT
+termcolor	1.4.1	Unlicense OR MIT	https://github.com/BurntSushi/termcolor	COPYING, LICENSE-MIT
+thiserror	1.0.69	MIT OR Apache-2.0	https://github.com/dtolnay/thiserror	LICENSE-APACHE, LICENSE-MIT
+thiserror	2.0.21	MIT OR Apache-2.0	https://github.com/dtolnay/thiserror	LICENSE-APACHE, LICENSE-MIT
+thiserror-impl	1.0.69	MIT OR Apache-2.0	https://github.com/dtolnay/thiserror	LICENSE-APACHE, LICENSE-MIT
+thiserror-impl	2.0.21	MIT OR Apache-2.0	https://github.com/dtolnay/thiserror	LICENSE-APACHE, LICENSE-MIT
+tiff	0.11.3	MIT	https://github.com/image-rs/image-tiff	LICENSE
+tinystr	0.8.4	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+tokio	1.53.3	MIT	https://github.com/tokio-rs/tokio	LICENSE
+toml_datetime	1.1.2+spec-1.1.0	MIT OR Apache-2.0	https://github.com/toml-rs/toml	LICENSE-APACHE, LICENSE-MIT
+toml_edit	0.25.17+spec-1.1.0	MIT OR Apache-2.0	https://github.com/toml-rs/toml	LICENSE-APACHE, LICENSE-MIT
+toml_parser	1.1.5+spec-1.1.0	MIT OR Apache-2.0	https://github.com/toml-rs/toml	LICENSE-APACHE, LICENSE-MIT
+tracing	0.1.44	MIT	https://github.com/tokio-rs/tracing	LICENSE
+tracing-attributes	0.1.31	MIT	https://github.com/tokio-rs/tracing	LICENSE
+tracing-core	0.1.36	MIT	https://github.com/tokio-rs/tracing	LICENSE, src\spin\LICENSE
+ttf-parser	0.25.1	MIT OR Apache-2.0	https://github.com/harfbuzz/ttf-parser	LICENSE-APACHE, LICENSE-MIT
+type-map	0.5.1	MIT/Apache-2.0	https://github.com/kardeiz/type-map	LICENSE-APACHE, LICENSE-MIT
+typenum	1.20.1	MIT OR Apache-2.0	https://github.com/paholg/typenum	LICENSE, LICENSE-APACHE, LICENSE-MIT
+uds_windows	1.2.1	MIT	https://github.com/haraldh/rust_uds_windows	LICENSE
+unarray	0.1.4	MIT OR Apache-2.0	https://github.com/cameron1024/unarray	LICENSE-APACHE, LICENSE-MIT
+unicode-ident	1.0.27	(MIT OR Apache-2.0) AND Unicode-3.0	https://github.com/dtolnay/unicode-ident	LICENSE-APACHE, LICENSE-MIT, LICENSE-UNICODE
+unicode-segmentation	1.13.3	MIT OR Apache-2.0	https://github.com/unicode-rs/unicode-segmentation	LICENSE-APACHE, LICENSE-MIT
+unicode-width	0.1.14	MIT OR Apache-2.0	https://github.com/unicode-rs/unicode-width	LICENSE-APACHE, LICENSE-MIT
+unicode-xid	0.2.6	MIT OR Apache-2.0	https://github.com/unicode-rs/unicode-xid	LICENSE-APACHE, LICENSE-MIT
+url	2.5.8	MIT OR Apache-2.0	https://github.com/servo/rust-url	LICENSE-APACHE, LICENSE-MIT
+urlencoding	2.1.3	MIT	https://github.com/kornelski/rust_urlencoding	LICENSE
+utf8_iter	1.0.4	Apache-2.0 OR MIT	https://github.com/hsivonen/utf8_iter	LICENSE-APACHE, LICENSE-MIT
+uuid	1.18.1	Apache-2.0 OR MIT	https://github.com/uuid-rs/uuid	LICENSE-APACHE, LICENSE-MIT
+vcpkg	0.2.15	MIT/Apache-2.0	https://github.com/mcgoo/vcpkg-rs	LICENSE-APACHE, LICENSE-MIT
+version_check	0.9.5	MIT/Apache-2.0	https://github.com/SergioBenitez/version_check	LICENSE-APACHE, LICENSE-MIT
+wait-timeout	0.2.1	MIT/Apache-2.0	https://github.com/alexcrichton/wait-timeout	LICENSE-APACHE, LICENSE-MIT
+walkdir	2.5.0	Unlicense/MIT	https://github.com/BurntSushi/walkdir	COPYING, LICENSE-MIT
+wasip2	1.0.4+wasi-0.2.12	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	https://github.com/bytecodealliance/wasi-rs	LICENSE-APACHE, LICENSE-Apache-2.0_WITH_LLVM-exception, LICENSE-MIT
+wasm-bindgen	0.2.129	MIT OR Apache-2.0	https://github.com/wasm-bindgen/wasm-bindgen	LICENSE-APACHE, LICENSE-MIT
+wasm-bindgen-futures	0.4.79	MIT OR Apache-2.0	https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/futures	LICENSE-APACHE, LICENSE-MIT
+wasm-bindgen-macro	0.2.129	MIT OR Apache-2.0	https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro	LICENSE-APACHE, LICENSE-MIT
+wasm-bindgen-macro-support	0.2.129	MIT OR Apache-2.0	https://github.com/wasm-bindgen/wasm-bindgen/tree/main/crates/macro-support	LICENSE-APACHE, LICENSE-MIT
+wasm-bindgen-shared	0.2.129	MIT OR Apache-2.0	https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/shared	LICENSE-APACHE, LICENSE-MIT
+wayland-backend	0.3.17	MIT	https://github.com/smithay/wayland-rs	LICENSE.txt
+wayland-client	0.31.15	MIT	https://github.com/smithay/wayland-rs	LICENSE.txt
+wayland-csd-frame	0.3.0	MIT	https://github.com/rust-windowing/wayland-csd-frame	LICENSE
+wayland-cursor	0.31.14	MIT	https://github.com/smithay/wayland-rs	LICENSE.txt
+wayland-protocols	0.32.13	MIT	https://github.com/smithay/wayland-rs	LICENSE.txt, protocols\COPYING
+wayland-protocols-experimental	20250721.0.1	MIT	https://github.com/smithay/wayland-rs	LICENSE.txt
+wayland-protocols-misc	0.3.12	MIT	https://github.com/smithay/wayland-rs	LICENSE.txt
+wayland-protocols-plasma	0.3.12	MIT	https://github.com/smithay/wayland-rs	LICENSE.txt, plasma-wayland-protocols\COPYING.LIB
+wayland-protocols-wlr	0.3.12	MIT	https://github.com/smithay/wayland-rs	LICENSE.txt
+wayland-scanner	0.31.11	MIT	https://github.com/smithay/wayland-rs	LICENSE.txt
+wayland-sys	0.31.11	MIT	https://github.com/smithay/wayland-rs	LICENSE.txt
+web-sys	0.3.106	MIT OR Apache-2.0	https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/web-sys	LICENSE-APACHE, LICENSE-MIT
+web-time	1.1.0	MIT OR Apache-2.0	https://github.com/daxpedda/web-time	LICENSE-APACHE, LICENSE-MIT
+webbrowser	1.2.4	MIT OR Apache-2.0	https://github.com/amodm/webbrowser-rs	LICENSE-APACHE, LICENSE-MIT
+weezl	0.1.12	MIT OR Apache-2.0	https://github.com/image-rs/weezl	LICENSE-APACHE, LICENSE-MIT
+wgpu	24.0.5	MIT OR Apache-2.0	https://github.com/gfx-rs/wgpu	LICENSE.APACHE, LICENSE.MIT
+wgpu-core	24.0.5	MIT OR Apache-2.0	https://github.com/gfx-rs/wgpu	LICENSE.APACHE, LICENSE.MIT
+wgpu-hal	24.0.4	MIT OR Apache-2.0	https://github.com/gfx-rs/wgpu	LICENSE.APACHE, LICENSE.MIT
+wgpu-types	24.0.0	MIT OR Apache-2.0	https://github.com/gfx-rs/wgpu	LICENSE.APACHE, LICENSE.MIT
+winapi	0.3.9	MIT/Apache-2.0	https://github.com/retep998/winapi-rs	LICENSE-APACHE, LICENSE-MIT
+winapi-i686-pc-windows-gnu	0.4.0	MIT/Apache-2.0	https://github.com/retep998/winapi-rs	
+winapi-util	0.1.11	Unlicense OR MIT	https://github.com/BurntSushi/winapi-util	COPYING, LICENSE-MIT
+winapi-x86_64-pc-windows-gnu	0.4.0	MIT/Apache-2.0	https://github.com/retep998/winapi-rs	
+windows	0.58.0	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows-core	0.58.0	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows-implement	0.58.0	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows-interface	0.58.0	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows-link	0.2.1	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows-result	0.2.0	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows-strings	0.1.0	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows-sys	0.52.0	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows-sys	0.59.0	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows-sys	0.61.2	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows-targets	0.52.6	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows_aarch64_gnullvm	0.52.6	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows_aarch64_msvc	0.52.6	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows_i686_gnu	0.52.6	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows_i686_gnullvm	0.52.6	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows_i686_msvc	0.52.6	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows_x86_64_gnu	0.52.6	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows_x86_64_gnullvm	0.52.6	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+windows_x86_64_msvc	0.52.6	MIT OR Apache-2.0	https://github.com/microsoft/windows-rs	license-apache-2.0, license-mit
+winit	0.30.13	Apache-2.0	https://github.com/rust-windowing/winit	LICENSE
+winnow	1.0.4	MIT	https://github.com/winnow-rs/winnow	LICENSE-MIT
+wit-bindgen	0.57.1	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	https://github.com/bytecodealliance/wit-bindgen	LICENSE-APACHE, LICENSE-Apache-2.0_WITH_LLVM-exception, LICENSE-MIT
+writeable	0.6.4	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+x11-dl	2.21.0	MIT	https://github.com/AltF02/x11-rs.git	LICENSE-MIT
+x11rb	0.13.2	MIT OR Apache-2.0	https://github.com/psychon/x11rb	LICENSE-APACHE, LICENSE-MIT
+x11rb-protocol	0.13.2	MIT OR Apache-2.0	https://github.com/psychon/x11rb	LICENSE-APACHE, LICENSE-MIT
+xcursor	0.3.11	MIT	https://github.com/esposm03/xcursor-rs	LICENSE
+xkbcommon-dl	0.4.2	MIT	https://github.com/rust-windowing/xkbcommon-dl	LICENSE
+xkeysym	0.2.1	MIT OR Apache-2.0 OR Zlib	https://github.com/notgull/xkeysym	LICENSE-APACHE, LICENSE-MIT, LICENSE-ZLIB
+xml-rs	0.8.29	MIT	https://github.com/kornelski/xml-rs	LICENSE
+yoke	0.8.3	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+yoke-derive	0.8.4	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+zbus	5.19.0	MIT	https://github.com/z-galaxy/zbus/	LICENSE
+zbus_macros	5.19.0	MIT	https://github.com/z-galaxy/zbus/	LICENSE
+zbus_names	4.3.5	MIT	https://github.com/z-galaxy/zbus/	LICENSE
+zcheapstr	1.1.0	MIT	https://github.com/z-galaxy/zcheapstr/	LICENSE
+zerocopy	0.8.63	BSD-2-Clause OR Apache-2.0 OR MIT	https://github.com/google/zerocopy	LICENSE-APACHE, LICENSE-BSD, LICENSE-MIT
+zerocopy-derive	0.8.63	BSD-2-Clause OR Apache-2.0 OR MIT	https://github.com/google/zerocopy	LICENSE-APACHE, LICENSE-BSD, LICENSE-MIT
+zerofrom	0.1.8	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+zerofrom-derive	0.1.8	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+zerotrie	0.2.5	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+zerovec	0.11.8	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+zerovec-derive	0.11.6	Unicode-3.0	https://github.com/unicode-org/icu4x	LICENSE
+zlib-rs	0.6.8	Zlib	https://github.com/trifectatechfoundation/zlib-rs	LICENSE
+zune-core	0.5.3	MIT OR Apache-2.0 OR Zlib	https://github.com/etemesi254/zune-image	LICENSE-APACHE, LICENSE-MIT, LICENSE-ZLIB
+zune-jpeg	0.5.15	MIT OR Apache-2.0 OR Zlib	https://github.com/etemesi254/zune-image/tree/dev/crates/zune-jpeg	LICENSE-APACHE, LICENSE-MIT, LICENSE-ZLIB
+zvariant	5.15.1	MIT	https://github.com/z-galaxy/zbus/	LICENSE
+zvariant_derive	5.15.1	MIT	https://github.com/z-galaxy/zbus/	LICENSE
+zvariant_utils	4.2.0	MIT	https://github.com/z-galaxy/zbus/	LICENSE

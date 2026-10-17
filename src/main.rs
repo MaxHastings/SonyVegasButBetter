@@ -6,6 +6,14 @@ fn main() {
             std::env::temp_dir().join("svbb-launch-error.txt"),
             format!("{e:#}"),
         );
+        if !std::env::args().any(|a| a == "--render") {
+            rfd::MessageDialog::new()
+                .set_title("SonyVegasButBetter could not start")
+                .set_description(format!("{e:#}"))
+                .set_level(rfd::MessageLevel::Error)
+                .show();
+        }
+        std::process::exit(1);
     }
 }
 fn run() -> anyhow::Result<()> {

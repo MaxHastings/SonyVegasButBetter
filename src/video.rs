@@ -311,12 +311,12 @@ impl VideoWorker {
         if self.last.as_ref() == Some(&key) {
             return;
         }
-        // Normal forward playback must finish its current frame even when a newer
-        // frame is queued. Only scrubs/source changes invalidate in-flight decoding.
+        // Playback and slow scrubs in either direction can finish the current
+        // frame. Large jumps/source changes invalidate in-flight decoding.
         let discontinuity = self
             .last
             .as_ref()
-            .is_none_or(|last| last.0 != key.0 || at < last.1 || at - last.1 > HZ / 4);
+            .is_none_or(|last| last.0 != key.0 || (at - last.1).abs() > HZ / 4);
         self.last = Some(key);
         let sequence = if discontinuity {
             self.generation.fetch_add(1, Ordering::Relaxed) + 1

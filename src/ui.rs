@@ -675,7 +675,7 @@ impl Editor {
         }
     }
     fn normalize(&mut self) {
-        let Some(c) = self
+        let Some(mut c) = self
             .selected
             .as_ref()
             .and_then(|id| self.p.clips.iter().find(|c| &c.id == id))
@@ -683,6 +683,19 @@ impl Editor {
         else {
             return;
         };
+        if c.lane == 0 {
+            if let Some(audio) = self
+                .p
+                .clips
+                .iter()
+                .find(|audio| audio.lane > 0 && c.link.is_some() && audio.link == c.link)
+            {
+                c = audio.clone();
+            } else {
+                self.status = "Select an audio clip to match loudness".into();
+                return;
+            }
+        }
         if self.p.tracks[c.lane].locked {
             self.error = Some("Track is locked".into());
             return;

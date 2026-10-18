@@ -336,15 +336,19 @@ impl Editor {
                         }
                         if response.hovered() {
                             let pos = ui.ctx().pointer_hover_pos().unwrap_or(rect.center());
-                            ui.ctx().set_cursor_icon(
-                                if (pos.x - rect.left()).abs() < 7.
-                                    || (pos.x - rect.right()).abs() < 7.
-                                {
-                                    egui::CursorIcon::ResizeHorizontal
+                            let mode = hit_mode(rect, handles, pos);
+                            ui.ctx().set_cursor_icon(if mode == 0 {
+                                egui::CursorIcon::Grab
+                            } else {
+                                egui::CursorIcon::ResizeHorizontal
+                            });
+                            if mode.abs() == 2 {
+                                response.clone().on_hover_text(if mode < 0 {
+                                    "Drag fade in"
                                 } else {
-                                    egui::CursorIcon::Grab
-                                },
-                            );
+                                    "Drag fade out"
+                                });
+                            }
                         }
                         if response.drag_started() {
                             self.selected = Some(c.id.clone());
@@ -352,24 +356,9 @@ impl Editor {
                                 let origin = ui
                                     .input(|i| i.pointer.press_origin())
                                     .unwrap_or(rect.center());
-                                let initial = origin.x;
                                 self.drag = Some(Drag {
                                     id: c.id.clone(),
-                                    edge: if rect.width() >= 14.
-                                        && (origin - handles[0]).length() <= 10.
-                                    {
-                                        -2
-                                    } else if rect.width() >= 14.
-                                        && (origin - handles[1]).length() <= 10.
-                                    {
-                                        2
-                                    } else if initial < rect.left() + 7. {
-                                        -1
-                                    } else if initial > rect.right() - 7. {
-                                        1
-                                    } else {
-                                        0
-                                    },
+                                    edge: hit_mode(rect, handles, origin),
                                     start: c.start,
                                     duration: c.duration,
                                     lane: c.lane,
@@ -687,4 +676,62 @@ fn c_fade(p: &Project, id: &str, left: bool) -> Tick {
         .find(|c| c.id == id)
         .map(|c| if left { c.fade_in } else { c.fade_out })
         .unwrap_or(0)
+}
+
+/// At low zoom, edge/fade hit areas overlap. Choose the nearest target rather
+/// than giving the left handle priority and unexpectedly moving the start.
+fn hit_mode(rect: Rect, handles: [Pos2; 2], origin: Pos2) -> i8 {
+    let left = (origin - handles[0]).length();
+    let right = (origin - handles[1]).length();
+    if rect.width() >= 14. && left.min(right) <= 10. {
+        return if left < right { -2 } else { 2 };
+    }
+    let left = (origin.x - rect.left()).abs();
+    let right = (origin.x - rect.right()).abs();
+    if left.min(right) < 7. {
+        if left < right { -1 } else { 1 }
+    } else {
+        0
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn narrow_clips_choose_the_correct_edge_and_fade() {
+        let rect = Rect::from_min_size(Pos2::ZERO, Vec2::new(8., 60.));
+        assert_eq!(
+            hit_mode(
+                rect,
+                [Pos2::new(1., 5.), Pos2::new(7., 5.)],
+                Pos2::new(6., 30.)
+            ),
+            1
+        );
+        assert_eq!(
+            hit_mode(
+                rect,
+                [Pos2::new(1., 5.), Pos2::new(7., 5.)],
+                Pos2::new(2., 30.)
+            ),
+            -1
+        );
+        let rect = Rect::from_min_size(Pos2::ZERO, Vec2::new(16., 60.));
+        assert_eq!(
+            hit_mode(
+                rect,
+                [Pos2::new(5., 5.), Pos2::new(11., 5.)],
+                Pos2::new(11., 5.)
+            ),
+            2
+        );
+        assert_eq!(
+            hit_mode(
+                rect,
+                [Pos2::new(5., 5.), Pos2::new(11., 5.)],
+                Pos2::new(5., 5.)
+            ),
+            -2
+        );
+    }
 }

@@ -79,6 +79,9 @@ impl Harness {
             steps.push_back(click("fit"));
             steps.push_back(Step::Wait("preview"));
             steps.push_back(Step::Assert("separate-linked"));
+            steps.push_back(key(Key::L, Modifiers::COMMAND));
+            steps.push_back(Step::Wait("loudness"));
+            steps.push_back(Step::Assert("linked-loudness"));
             steps.push_back(Step::Click(Target::ClipAt(0, 2.)));
             steps.push_back(key(Key::S, Modifiers::NONE));
             steps.push_back(Step::Assert("one-click-split"));
@@ -491,6 +494,10 @@ impl Harness {
                     }
                 }
                 Step::Assert(condition) => match *condition {
+                    "linked-loudness" => anyhow::ensure!(
+                        app.p.lane(0)[0].gain_db == 0. && app.p.lane(1)[0].gain_db.abs() > 0.1,
+                        "Loudness shortcut on video must adjust its linked audio"
+                    ),
                     "separate-linked" => {
                         app.p.validate()?;
                         anyhow::ensure!(

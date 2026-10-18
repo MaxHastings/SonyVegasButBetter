@@ -22,7 +22,7 @@ The distributed release excludes this driver.
 
 ## Current 0.1.1 checks
 
-**18 core/UI tests and all 5 real-media integration tests pass.** They cover
+**19 core/UI tests and all 5 real-media integration tests pass.** They cover
 insertion, split, trim, order/move, locks, snap, all ripple intersections, exact
 frame/sample conversions, atomic failure, undo/redo, source overwrite refusal,
 gain limits, save/reopen/backup equivalence, populated migrations and shortcut
@@ -68,7 +68,7 @@ The 0.1.1 driver additionally verifies separate linked A/V, one-click split, ord
 trim extension without moving the clip, fixed-end left trim, top-corner video/audio
 fades, unlinking, independent lane movement, undo, playback, saving and GPU export.
 The full acceptance/recovery scripts now operate on four lanes and 30 explicit clips.
-Current runs passed 202 + 14 + 48 GUI steps, both normal exports used NVIDIA NVENC,
+Current runs passed 202 + 14 + 51 GUI steps, both normal exports used NVIDIA NVENC,
 and both recovery phases passed. The first full session took about 89 seconds,
 including editing and export, without creating video/PCM preparation caches.
 RF64 capture duration checks detect duplicated output during load/seek; delayed

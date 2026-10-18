@@ -1,0 +1,15 @@
+{
+  "clips": 30,
+  "duration_seconds": 230.0,
+  "elapsed_seconds": 0.4291506,
+  "encoder_used": null,
+  "events": [
+    "0: Click(Named(\"recover\")); clips=0 selected=None media=None; duration=[]; property=None",
+    "1: Wait(\"opened\"); clips=30 selected=None media=None; duration=[4.5, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=None",
+    "2: Assert(\"recovered\"); clips=30 selected=None media=None; duration=[4.5, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=None"
+  ],
+  "passed": true,
+  "stage": "crash-read",
+  "steps": 3,
+  "verified": "Native eframe window; egui raw pointer/keyboard/drop events; live media adapters; real save and export"
+}

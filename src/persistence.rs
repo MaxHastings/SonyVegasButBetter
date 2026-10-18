@@ -6,14 +6,18 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const SCHEMA_VERSION: i32 = 2;
+pub const SCHEMA_VERSION: i32 = 3;
 pub fn migrate(conn: &mut Connection) -> Result<()> {
     let version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
     ensure!(
         version <= SCHEMA_VERSION,
         "Project was created by a newer SVBB (schema {version})"
     );
+    if version == SCHEMA_VERSION {
+        return Ok(());
+    }
     let tx = conn.transaction()?;
+    tx.pragma_update(None, "defer_foreign_keys", true)?;
     if version == 0 {
         tx.execute_batch("CREATE TABLE project(id TEXT PRIMARY KEY, name TEXT NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL, fps_num INTEGER NOT NULL, fps_den INTEGER NOT NULL, peak_protection INTEGER NOT NULL);
             CREATE TABLE media(id TEXT PRIMARY KEY, path TEXT NOT NULL, metadata TEXT NOT NULL);
@@ -22,6 +26,18 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
     }
     if version < 2 {
         tx.execute_batch("ALTER TABLE clips ADD COLUMN fade_in INTEGER NOT NULL DEFAULT 0; ALTER TABLE clips ADD COLUMN fade_out INTEGER NOT NULL DEFAULT 0;")?;
+    }
+    if version < 3 {
+        tx.execute_batch("ALTER TABLE clips ADD COLUMN link TEXT;
+            UPDATE clips SET lane=lane+1 WHERE lane>0;
+            UPDATE tracks SET lane=3 WHERE lane=2;
+            UPDATE tracks SET lane=2 WHERE lane=1;
+            INSERT INTO tracks SELECT 1,'A1 · Source audio',gain_db,mute,locked FROM tracks WHERE lane=0;
+            UPDATE clips SET link=id WHERE lane=0 AND media IN (SELECT id FROM media WHERE json_extract(metadata,'$.audio') IS NOT NULL);
+            INSERT INTO clips(id,media,lane,start,source_in,duration,gain_db,mute,fade_in,fade_out,link)
+                SELECT lower(hex(randomblob(16))),media,1,start,source_in,duration,gain_db,mute,fade_in,fade_out,link FROM clips WHERE lane=0 AND link IS NOT NULL;
+            UPDATE clips SET gain_db=0,mute=0,fade_in=0,fade_out=0 WHERE lane=0;
+            UPDATE tracks SET name='V1 · Video',gain_db=0,mute=0 WHERE lane=0;")?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;
@@ -73,7 +89,7 @@ pub fn save(path: &Path, p: &Project) -> Result<()> {
         }
         for v in &p.clips {
             tx.execute(
-                "INSERT INTO clips VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO clips VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 params![
                     v.id,
                     v.media,
@@ -84,7 +100,8 @@ pub fn save(path: &Path, p: &Project) -> Result<()> {
                     v.gain_db,
                     v.mute,
                     v.fade_in,
-                    v.fade_out
+                    v.fade_out,
+                    v.link
                 ],
             )?;
         }
@@ -149,7 +166,7 @@ pub fn load(path: &Path) -> Result<Project> {
         p.media.push(m);
     }
     let mut tracks = c.prepare("SELECT lane,name,gain_db,mute,locked FROM tracks")?;
-    let mut seen = [false; 3];
+    let mut seen = [false; LANES];
     for row in tracks.query_map([], |r| {
         Ok((
             r.get::<_, usize>(0)?,
@@ -162,12 +179,12 @@ pub fn load(path: &Path) -> Result<Project> {
         ))
     })? {
         let (i, t) = row?;
-        ensure!(i < 3, "Invalid track index");
+        ensure!(i < LANES, "Invalid track index");
         p.tracks[i] = t;
         seen[i] = true;
     }
     ensure!(seen.into_iter().all(|x| x), "Project is missing tracks");
-    let mut clips = c.prepare("SELECT id,media,lane,start,source_in,duration,gain_db,mute,fade_in,fade_out FROM clips ORDER BY rowid")?;
+    let mut clips = c.prepare("SELECT id,media,lane,start,source_in,duration,gain_db,mute,fade_in,fade_out,link FROM clips ORDER BY rowid")?;
     p.clips = clips
         .query_map([], |r| {
             Ok(Clip {
@@ -181,6 +198,7 @@ pub fn load(path: &Path) -> Result<Project> {
                 mute: r.get(7)?,
                 fade_in: r.get(8)?,
                 fade_out: r.get(9)?,
+                link: r.get(10)?,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;

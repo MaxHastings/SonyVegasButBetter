@@ -6,6 +6,7 @@ use uuid::Uuid;
 /// Exact common broadcast frame and audio sample positions. Never accumulate seconds.
 pub const HZ: i64 = 282_240_000;
 pub const MAX_TIME: i64 = HZ * 60 * 60 * 24;
+pub const LANES: usize = 4;
 pub type Tick = i64;
 pub fn seconds(t: Tick) -> f64 {
     t as f64 / HZ as f64
@@ -82,6 +83,8 @@ pub struct Clip {
     pub mute: bool,
     pub fade_in: Tick,
     pub fade_out: Tick,
+    #[serde(default)]
+    pub link: Option<String>,
 }
 impl Clip {
     pub fn end(&self) -> Tick {
@@ -99,6 +102,7 @@ impl Clip {
             mute: false,
             fade_in: 0,
             fade_out: 0,
+            link: None,
         }
     }
     pub fn clamp_fades(&mut self) {
@@ -122,7 +126,7 @@ pub struct Project {
     pub fps: Rational,
     pub media: Vec<Media>,
     pub clips: Vec<Clip>,
-    pub tracks: [Track; 3],
+    pub tracks: [Track; LANES],
     pub peak_protection: bool,
 }
 impl Default for Project {
@@ -135,13 +139,17 @@ impl Default for Project {
             fps: Rational::new(60, 1),
             media: vec![],
             clips: vec![],
-            tracks: ["Video / source audio", "Voice / audio 1", "Music / audio 2"].map(|name| {
-                Track {
-                    name: name.into(),
-                    gain_db: 0.,
-                    mute: false,
-                    locked: false,
-                }
+            tracks: [
+                "V1 · Video",
+                "A1 · Source audio",
+                "A2 · Voice",
+                "A3 · Music",
+            ]
+            .map(|name| Track {
+                name: name.into(),
+                gain_db: 0.,
+                mute: false,
+                locked: false,
             }),
             peak_protection: true,
         }
@@ -195,14 +203,14 @@ impl Project {
         ids.clear();
         for t in &self.tracks {
             ensure!(
-                t.gain_db.is_finite() && (-60.0..=24.0).contains(&t.gain_db),
+                t.gain_db.is_finite() && (-60.0..=60.0).contains(&t.gain_db),
                 "Invalid track gain"
             );
         }
         for c in &self.clips {
             ensure!(ids.insert(c.id.clone()), "Duplicate clip ID");
             ensure!(
-                c.lane < 3 && c.start >= 0 && c.duration > 0 && c.source_in >= 0,
+                c.lane < LANES && c.start >= 0 && c.duration > 0 && c.source_in >= 0,
                 "Invalid clip range"
             );
             ensure!(
@@ -220,7 +228,7 @@ impl Project {
             );
             ensure!(c.lane == 0 || m.audio.is_some(), "Media has no audio");
             ensure!(
-                c.gain_db.is_finite() && (-60.0..=24.0).contains(&c.gain_db),
+                c.gain_db.is_finite() && (-60.0..=60.0).contains(&c.gain_db),
                 "Invalid clip gain"
             );
             ensure!(
@@ -231,7 +239,32 @@ impl Project {
                 "Invalid fades"
             );
         }
-        for lane in 0..3 {
+        for group in self
+            .clips
+            .iter()
+            .filter_map(|c| c.link.as_ref())
+            .collect::<std::collections::HashSet<_>>()
+        {
+            let members: Vec<_> = self
+                .clips
+                .iter()
+                .filter(|c| c.link.as_ref() == Some(group))
+                .collect();
+            ensure!(
+                members.len() == 2,
+                "A link must contain one video and one audio clip"
+            );
+            let (a, b) = (members[0], members[1]);
+            ensure!(
+                (a.lane == 0) != (b.lane == 0)
+                    && a.media == b.media
+                    && a.start == b.start
+                    && a.source_in == b.source_in
+                    && a.duration == b.duration,
+                "Linked video and audio must stay synchronized"
+            );
+        }
+        for lane in 0..LANES {
             for pair in self.lane(lane).windows(2) {
                 if pair[0].end() > pair[1].start {
                     bail!(
@@ -251,12 +284,21 @@ impl Project {
 pub fn amplitude(db: f64) -> f64 {
     10_f64.powf(db / 20.)
 }
+pub fn clip_amplitude(c: &Clip, local: Tick) -> f64 {
+    if c.mute || local < 0 || local >= c.duration {
+        return 0.;
+    }
+    let edge = ticks(0.003).min(c.duration / 2);
+    amplitude(c.gain_db)
+        * (local as f64 / c.fade_in.max(edge) as f64).clamp(0., 1.)
+        * ((c.duration - local) as f64 / c.fade_out.max(edge) as f64).clamp(0., 1.)
+}
 pub fn match_loudness(integrated: f64, true_peak: f64) -> Result<f64> {
     ensure!(
-        integrated.is_finite() && true_peak.is_finite() && integrated >= -50.,
-        "Recording is silent or below -50 LUFS; automatic boost refused. Use manual gain after checking the noise."
+        integrated.is_finite() && true_peak.is_finite() && integrated >= -70.,
+        "Recording is silent or below -70 LUFS; automatic boost refused. Use manual gain after checking the noise."
     );
-    let gain = (-16. - integrated).min(-1. - true_peak).clamp(-60., 18.);
+    let gain = (-16. - integrated).min(-1. - true_peak).clamp(-60., 48.);
     ensure!(
         true_peak + gain <= -1. + 1e-6,
         "True peak is outside the supported automatic gain range"

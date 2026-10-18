@@ -1,0 +1,14 @@
+{
+  "adapter_initialize_and_first_frame_ms": 516.0079,
+  "preview": "960x540 persistent native FFmpeg video decoder, on-demand float audio through libmpv; excludes UI texture upload",
+  "preview_prepare_ms": 0.0893,
+  "rendered_fps_over_four_seconds": 59.24822107216231,
+  "seek_ms": [
+    43.5204,
+    26.9296,
+    45.3333,
+    119.3287,
+    68.648
+  ],
+  "source": "1080p60 synthetic ten-minute recording, ten-second tail clip"
+}

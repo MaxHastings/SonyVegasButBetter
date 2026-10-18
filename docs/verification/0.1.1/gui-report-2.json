@@ -1,0 +1,26 @@
+{
+  "clips": 30,
+  "duration_seconds": 230.0,
+  "elapsed_seconds": 50.6594503,
+  "encoder_used": "Nvidia",
+  "events": [
+    "0: Wait(\"opened\"); clips=30 selected=None media=None; duration=[5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=None",
+    "1: Assert(\"edited\"); clips=30 selected=None media=None; duration=[5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=None",
+    "2: Click(Clip(0, 0)); clips=30 selected=None media=None; duration=[5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=None",
+    "3: Click(Named(\"Duration (s)\")); clips=30 selected=Some(\"6bb1890a-ba13-4bfb-9500-5d9c1f854819\") media=None; duration=[5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=Some(\"value=5 focus=false changed=false clicked=false hovered=false rect=[[1249.8 162.0] - [1290.6 184.4]] ptr=Some([221.0 567.0])\")",
+    "4: Key(A, Modifiers { command: true }); clips=30 selected=Some(\"6bb1890a-ba13-4bfb-9500-5d9c1f854819\") media=None; duration=[5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=Some(\"value=5 focus=true changed=false clicked=false hovered=true rect=[[1257.8 166.0] - [1297.8 180.4]] ptr=Some([1270.2 173.2])\")",
+    "5: Text(\"4.5\"); clips=30 selected=Some(\"6bb1890a-ba13-4bfb-9500-5d9c1f854819\") media=None; duration=[5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=Some(\"value=5 focus=true changed=false clicked=false hovered=true rect=[[1257.8 166.0] - [1297.8 180.4]] ptr=Some([1270.2 173.2])\")",
+    "6: Key(Enter, Modifiers::NONE); clips=30 selected=Some(\"6bb1890a-ba13-4bfb-9500-5d9c1f854819\") media=None; duration=[4.5, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=Some(\"value=4.5 focus=true changed=false clicked=false hovered=true rect=[[1257.8 166.0] - [1297.8 180.4]] ptr=Some([1270.2 173.2])\")",
+    "7: Key(S, Modifiers { command: true }); clips=30 selected=Some(\"6bb1890a-ba13-4bfb-9500-5d9c1f854819\") media=None; duration=[4.5, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=Some(\"value=4.5 focus=false changed=false clicked=false hovered=true rect=[[1249.8 162.0] - [1290.6 184.4]] ptr=Some([1270.2 173.2])\")",
+    "8: Wait(\"saved\"); clips=30 selected=Some(\"6bb1890a-ba13-4bfb-9500-5d9c1f854819\") media=None; duration=[4.5, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=Some(\"value=4.5 focus=false changed=false clicked=false hovered=true rect=[[1249.8 162.0] - [1290.6 184.4]] ptr=Some([1270.2 173.2])\")",
+    "9: Key(R, Modifiers { command: true }); clips=30 selected=Some(\"6bb1890a-ba13-4bfb-9500-5d9c1f854819\") media=None; duration=[4.5, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=Some(\"value=4.5 focus=false changed=false clicked=false hovered=true rect=[[1249.8 162.0] - [1290.6 184.4]] ptr=Some([1270.2 173.2])\")",
+    "10: RenderPath; clips=30 selected=Some(\"6bb1890a-ba13-4bfb-9500-5d9c1f854819\") media=None; duration=[4.5, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=Some(\"value=4.5 focus=false changed=false clicked=false hovered=true rect=[[1249.8 162.0] - [1290.6 184.4]] ptr=Some([1270.2 173.2])\")",
+    "11: Click(Named(\"render\")); clips=30 selected=Some(\"6bb1890a-ba13-4bfb-9500-5d9c1f854819\") media=None; duration=[4.5, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=Some(\"value=4.5 focus=false changed=false clicked=false hovered=false rect=[[1249.8 162.0] - [1290.6 184.4]] ptr=Some([609.7 251.7])\")",
+    "12: Wait(\"rendered\"); clips=30 selected=Some(\"6bb1890a-ba13-4bfb-9500-5d9c1f854819\") media=None; duration=[4.5, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=Some(\"value=4.5 focus=false changed=false clicked=false hovered=false rect=[[1249.8 162.0] - [1290.6 184.4]] ptr=Some([421.8 281.1])\")",
+    "13: CloseRender; clips=30 selected=Some(\"6bb1890a-ba13-4bfb-9500-5d9c1f854819\") media=None; duration=[4.5, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 20.0, 80.0, 80.0]; property=Some(\"value=4.5 focus=false changed=false clicked=false hovered=false rect=[[1249.8 162.0] - [1290.6 184.4]] ptr=Some([421.8 281.1])\")"
+  ],
+  "passed": true,
+  "stage": "2",
+  "steps": 14,
+  "verified": "Native eframe window; egui raw pointer/keyboard/drop events; live media adapters; real save and export"
+}

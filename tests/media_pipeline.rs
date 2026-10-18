@@ -148,8 +148,8 @@ fn actual_cut_mix_export_save_reopen_and_preview() {
     let ids: Vec<_> = p.media.iter().map(|m| m.id.clone()).collect();
     edit::append(&mut p, &ids[0], 0, None).unwrap();
     edit::append(&mut p, &ids[1], 0, None).unwrap();
-    let v = edit::append(&mut p, &ids[2], 1, Some(HZ)).unwrap();
-    let a = p.clips[0].id.clone();
+    let v = edit::append(&mut p, &ids[2], 2, Some(HZ)).unwrap();
+    let a = p.lane(0)[0].id.clone();
     edit::split(&mut p, &a, HZ).unwrap();
     let remove = p.lane(0)[1].id.clone();
     edit::split(&mut p, &remove, HZ * 2).unwrap();
@@ -162,7 +162,7 @@ fn actual_cut_mix_export_save_reopen_and_preview() {
     c.gain_db = gain;
     c.fade_in = HZ / 2;
     c.fade_out = HZ / 2;
-    p.tracks[0].gain_db = -12.;
+    p.tracks[1].gain_db = -12.;
     p.validate().unwrap();
     let path = root.join("integration.svbb");
     persistence::save(&path, &p).unwrap();
@@ -258,6 +258,12 @@ fn actual_cut_mix_export_save_reopen_and_preview() {
         capture.snapshot().frames
     );
     drop(capture);
+    let captured_all = samples(&rt, &captured, 0., 20.);
+    assert!(
+        (captured_all.len() as f64 / 48000. - seconds(p.duration())).abs() < 0.02,
+        "Preview capture must not duplicate samples while initializing/seeking: {}s",
+        captured_all.len() as f64 / 48000.
+    );
     for position in [0.5, 1.5, 3.5, 5.5] {
         let preview = samples(&rt, &captured, position, 0.25);
         let exported = samples(&rt, &output, position, 0.25);
@@ -279,10 +285,12 @@ fn actual_cut_mix_export_save_reopen_and_preview() {
     )
     .unwrap();
     persistence::save(&path, &reopened).unwrap();
+    let mut cpu_settings = s.clone();
+    cpu_settings.encoder = render::Encoder::Software;
     render::export(
         &rt,
         &reopened,
-        &s,
+        &cpu_settings,
         &root.join("integration-second.mp4"),
         &cancel,
         |_| {},

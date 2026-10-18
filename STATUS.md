@@ -1,40 +1,31 @@
-# SVBB 0.1 - Windows personal playtest candidate
+# SVBB 0.1.1 — Windows editing update
 
-Milestones A-D are implemented: native Rust editor, import/metadata, waveforms/
-thumbnails, persistent synchronized preview, precise editing, drag/trim/reorder,
-snap/locks/ripple/undo, three audio lanes, gain/mute/fades, measured voice matching,
-meters, SQLite projects/migrations, atomic saves/backups, per-session recovery,
-relinking and validated H.264/AAC export with progress and cancellation.
+The long-recording preview bottleneck is removed. Persistent FFmpeg decoders read
+originals on demand; the audio mix is a bounded virtual float stream rather than
+prepared PCM files. Waveform indexing is progressive and independent of playback.
 
-Milestone E: **Windows synthetic automated workflow passes; final manual release
-gate remains open.** There are no known failing automated core-workflow tests.
-This is not a public release or a claim that every manual acceptance check passed.
+Implemented: one-click playhead placement/selection and S split; live source preview
+while trimming; fixed opposite-edge trims clamped to source/neighbour bounds; corner
+fade handles; independent video/audio lanes linked for positional edits, split and
+delete; unlink/relink and undo; readable auto-scaled waveforms; manual gain to +60 dB,
+loudness matching to +48 dB subject to true peak; actual GPU encoder probing, CPU
+fallback, render ETA and validation. Schema 3 migrates older implicit source audio
+onto its own linked track and preserves a backup.
 
-Verified locally on Windows x64:
+Windows verification is recorded in TESTING.md and docs/verification/0.1.1.
+The personal real-footage playtest gate remains open. macOS/Linux have not been run
+locally. This is a personal Windows playtest package, not a public release.
 
-* 16 core/UI tests and 5 real-media integration tests pass.
-* Native GUI: 193 steps, 30 minutes of sources, four distinct microphones, ten
-  removals, three reorders, mix/fades, save and 3:50 export.
-* New process: 14 steps, reopen/edit/save/export again; both files decode fully.
-* Intentional interruption/autosave/native recovery preserves the manual save.
-* Native launch and multi-file Windows dialog import.
-* Release compilation, runtime checksums, portable package and launch checks as
-  recorded in docs/verification and TESTING.md.
+Run artifacts/SVBB-0.1.1-windows-x64/SonyVegasButBetter.exe with its runtime folder.
+The 0.1.0 package is retained separately. Projects saved by 0.1.1 use schema 3 and
+are not readable by the older executable; migration backups preserve older files.
 
-Artifacts: artifacts/SVBB-0.1.0-windows-x64/SonyVegasButBetter.exe and the adjacent
-portable ZIP. Run directly and keep its runtime folder. PLAYTEST.md is the guide.
+Scope remains one video lane, three audio lanes, SDR, straight cuts/fades and the
+first source video/audio streams. Same-lane overlaps are rejected. No titles,
+layer compositing, denoising or plugin hosting. Export still uses CPU decoding and
+filters with optional hardware encoding; it is not an entirely GPU-resident pipeline.
 
-Limits: initial 960x540 video cache preparation takes time and disk space. Later
-edits reuse it; export reads originals. SDR only, one video/two external audio
-lanes, no same-lane overlaps, first source video/audio streams only, no titles,
-compositing, advanced effects or plugin hosting.
-
-Unverified: actual Explorer OS drop delivery, physical/high-DPI variants, device
-loss, audible speech quality and the complete personal session with real gameplay.
-The external mouse helper's boundary failure limits OS automation. macOS/Linux
-were neither compiled nor run locally; CI and packaging configurations are ready
-without a success claim. See PLAYTEST.md for remaining checks.
-
-Public redistribution needs native runtime corresponding-source/notice audit
-and codec patent/distribution review. The application is GPL-3.0-or-later; no
-proprietary distribution clearance is claimed.
+Manual checks still include real speech/gameplay listening, physical mouse/DPI
+variants, audio-device loss, OS file-drop delivery and long unique-source workloads.
+Public redistribution retains the native-runtime corresponding-source/notice and
+codec distribution review items described in LICENSES.md.

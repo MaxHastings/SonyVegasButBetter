@@ -20,7 +20,9 @@ fn main() -> anyhow::Result<()> {
     let startup = Instant::now();
     let player = Player::new(&rt)?;
     player.load(plan, 0, false);
-    while !player.snapshot().loaded && startup.elapsed() < Duration::from_secs(10) {
+    while (!player.snapshot().loaded || player.snapshot().frames == 0)
+        && startup.elapsed() < Duration::from_secs(10)
+    {
         std::thread::sleep(Duration::from_millis(5));
     }
     let startup_ms = startup.elapsed().as_secs_f64() * 1000.;
@@ -45,7 +47,7 @@ fn main() -> anyhow::Result<()> {
     std::thread::sleep(Duration::from_secs(4));
     player.pause();
     let fps = (player.snapshot().frames - frames) as f64 / start.elapsed().as_secs_f64();
-    let report = serde_json::json!({"source":"1080p60 synthetic ten-minute recording, ten-second tail clip","preview":"960x540 software render, persistent libmpv; excludes UI texture upload","warm_preview_prepare_ms":prepare_ms,"adapter_initialize_and_load_ms":startup_ms,"seek_ms":seeks,"rendered_fps_over_four_seconds":fps});
+    let report = serde_json::json!({"source":"1080p60 synthetic ten-minute recording, ten-second tail clip","preview":"960x540 persistent native FFmpeg video decoder, on-demand float audio through libmpv; excludes UI texture upload","preview_prepare_ms":prepare_ms,"adapter_initialize_and_first_frame_ms":startup_ms,"seek_ms":seeks,"rendered_fps_over_four_seconds":fps});
     println!("{}", serde_json::to_string_pretty(&report)?);
     std::fs::write(
         "test-output/benchmark.json",

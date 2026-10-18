@@ -13,7 +13,8 @@ offered as a proprietary-license distribution.
 | rusqlite / bundled SQLite | Project persistence | MIT / SQLite public domain |
 | uuid | Stable entity identifiers | MIT OR Apache-2.0 |
 | rfd | Native file/message dialogs | MIT |
-| libloading | Narrow libmpv dynamic C ABI adapter | ISC |
+| libloading | Dynamic FFmpeg/libmpv ABI adapters | ISC |
+| cc (build) | Compile the small native FFmpeg shim | MIT OR Apache-2.0 |
 | sha2 | Disposable cache identity | MIT OR Apache-2.0 |
 | image (PNG only) | Thumbnails and application mark | MIT OR Apache-2.0 |
 | same-file | Source overwrite protection, including hard links | Unlicense OR MIT |
@@ -32,10 +33,19 @@ Regenerate using `python scripts/collect-licenses.py` after dependency changes.
   runtime-manifest.json. Configure flags are in `licenses/FFmpeg-configuration.txt`;
   the package also contains the original upstream build README and GPL text.
 * libmpv: shinchiro **20260903**, mpv commit **69e63f425a**, x86_64 shared build.
-  This wraps FFmpeg libraries for persistent decoding and synchronized playback.
+  This provides audio-device output, buffering and master filtering.
   The pinned build recipe/release and binary hashes are in runtime-manifest.json.
   `licenses/mpv-GPL.txt` preserves the upstream GPL text. mpv/FFmpeg linked
   dependencies retain their own licenses and notices.
+
+* Native preview FFmpeg shared libraries: BtbN autobuild **2026-10-18-13-01**,
+  FFmpeg **n9.0.2-28-g669f5ab083**, GPL shared configuration. Five DLLs ship:
+  avformat 63, avcodec 63, avutil 61, swresample 7 and swscale 10. The same build's
+  headers are vendored under `native/include` with their original notices.
+  Archive and DLL hashes are in runtime-manifest.json; the upstream license is
+  `licenses/FFmpeg-preview-GPLv3.txt`.
+  Source: https://github.com/FFmpeg/FFmpeg/commit/669f5ab083 and build recipe:
+  https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-10-18-13-01.
 
 Primary provenance: [Gyan build/source details](https://www.gyan.dev/ffmpeg/builds/),
 [pinned FFmpeg source](https://github.com/FFmpeg/FFmpeg/commit/946fcce07b),
@@ -48,10 +58,13 @@ Downloads are explicit, versioned and checksum-checked; normal editing is offlin
 
 ## Encoder choices and redistribution boundary
 
-Export deliberately uses the bundled software **libx264** encoder and FFmpeg's
-native AAC encoder. There is no GPU encoder choice or hidden hardware fallback.
-H.264 uses x264 `fast`, YUV420P, CRF **25 / 21 / 17** for Smaller / Balanced / High.
-AAC is stereo 48 kHz at 192 kbps; MP4 gets `+faststart` metadata placement.
+Auto export probes actual NVENC, QSV, AMF or VideoToolbox initialization and falls
+back to libx264. A failed Auto GPU render can retry on CPU before replacing the
+destination. CPU uses x264 fast with CRF 25/21/17; NVENC uses p5/hq VBR with CQ
+25/21/17 and zero target bitrate. QSV uses global quality 25/21/17, AMF CQP
+25/21/17, and VideoToolbox hardware-only encoding with quality-dependent bitrate.
+All paths output H.264 YUV420P and AAC stereo 48 kHz, 192 kbps with MP4 faststart.
+GPU driver libraries are provided by the operating system.
 
 Before public redistribution, audit complete corresponding-source/build-material
 availability for every linked native runtime dependency and satisfy all notices

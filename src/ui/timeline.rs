@@ -4,63 +4,68 @@ impl Editor {
     pub(super) fn timeline(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.strong("TIMELINE");
-            ui.label("V1 + attached sound / A1 / A2");
+            ui.checkbox(&mut self.waveform_auto, "Auto waveform scale").on_hover_text("Display only: makes quiet detail visible. Does not change the mix. Disable to show signal amplitude.");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.monospace(timecode(self.playhead, self.p.fps));
             });
         });
         ui.separator();
-        let lane_h = ((ui.available_height() - 36.) / 3.).clamp(72., 160.);
+        let lane_h = ((ui.available_height() - 44.) / LANES as f32).clamp(64., 160.);
         let header_w = 196.;
         let ruler_h = 26.;
         let available = ui.available_width();
         ui.horizontal_top(|ui| {
-            ui.allocate_ui_with_layout(
-                Vec2::new(header_w, ruler_h + 3. * lane_h),
-                egui::Layout::top_down(egui::Align::Min),
-                |ui| {
-                    ui.add_space(ruler_h);
-                    for lane in 0..3 {
-                        let t = self.p.tracks[lane].clone();
-                        ui.allocate_ui_with_layout(
-                            Vec2::new(header_w - 8., lane_h - 5.),
-                            egui::Layout::top_down(egui::Align::Min),
-                            |ui| {
-                                ui.strong(&t.name);
-                                ui.horizontal(|ui| {
-                                    let (mut mute, mut locked) = (t.mute, t.locked);
-                                    if ui.checkbox(&mut mute, "Mute").changed() {
-                                        self.apply(|p| {
-                                            p.tracks[lane].mute = mute;
-                                            Ok(())
-                                        });
-                                    }
-                                    if ui.checkbox(&mut locked, "Lock").changed() {
-                                        self.apply(|p| {
-                                            p.tracks[lane].locked = locked;
-                                            Ok(())
-                                        });
-                                    }
-                                });
-                                let mut gain = t.gain_db;
-                                let response = ui.add(
-                                    egui::Slider::new(&mut gain, -60.0..=12.)
-                                        .suffix(" dB")
-                                        .clamping(egui::SliderClamping::Never),
-                                );
-                                trace(ui.ctx(), format!("track-gain-{lane}"), &response);
-                                if response.changed() {
-                                    self.apply(|p| {
-                                        p.tracks[lane].gain_db = gain;
-                                        Ok(())
-                                    });
-                                }
-                            },
-                        );
-                        ui.separator();
-                    }
-                },
+            let (headers, _) = ui.allocate_exact_size(
+                Vec2::new(header_w, ruler_h + LANES as f32 * lane_h),
+                Sense::hover(),
             );
+            for lane in 0..LANES {
+                let t = self.p.tracks[lane].clone();
+                let rect = Rect::from_min_size(
+                    headers.min + Vec2::new(0., ruler_h + lane as f32 * lane_h),
+                    Vec2::new(header_w - 8., lane_h),
+                );
+                let mut controls = ui.new_child(
+                    egui::UiBuilder::new()
+                        .max_rect(rect.shrink2(Vec2::new(0., 4.)))
+                        .layout(egui::Layout::top_down(egui::Align::Min)),
+                );
+                controls.strong(&t.name);
+                controls.horizontal(|ui| {
+                    let (mut mute, mut locked) = (t.mute, t.locked);
+                    if ui
+                        .checkbox(&mut mute, if lane == 0 { "Hide" } else { "Mute" })
+                        .changed()
+                    {
+                        self.apply(|p| {
+                            p.tracks[lane].mute = mute;
+                            Ok(())
+                        });
+                    }
+                    if ui.checkbox(&mut locked, "Lock").changed() {
+                        self.apply(|p| {
+                            p.tracks[lane].locked = locked;
+                            Ok(())
+                        });
+                    }
+                });
+                if lane > 0 {
+                    let mut gain = t.gain_db;
+                    let response =
+                        controls.add(egui::Slider::new(&mut gain, -60.0..=60.0).suffix(" dB"));
+                    trace(ui.ctx(), format!("track-gain-{lane}"), &response);
+                    if response.changed() {
+                        self.apply(|p| {
+                            p.tracks[lane].gain_db = gain;
+                            Ok(())
+                        });
+                    }
+                }
+                ui.painter().line_segment(
+                    [rect.left_bottom(), rect.right_bottom()],
+                    Stroke::new(1., Color32::from_gray(60)),
+                );
+            }
             let canvas_width = (seconds(self.p.duration() + HZ * 10) as f32 * self.zoom)
                 .max(available - header_w - 22.);
             egui::ScrollArea::both()
@@ -68,7 +73,7 @@ impl Editor {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     let (canvas, canvas_response) = ui.allocate_exact_size(
-                        Vec2::new(canvas_width, ruler_h + 3. * lane_h),
+                        Vec2::new(canvas_width, ruler_h + LANES as f32 * lane_h),
                         Sense::hover(),
                     );
                     let painter = ui.painter_at(canvas);
@@ -118,7 +123,7 @@ impl Editor {
                             Color32::from_gray(150),
                         );
                     }
-                    for lane in 0..3 {
+                    for lane in 0..LANES {
                         let rect = Rect::from_min_size(
                             canvas.min + Vec2::new(0., ruler_h + lane as f32 * lane_h),
                             Vec2::new(canvas.width(), lane_h),
@@ -143,6 +148,23 @@ impl Editor {
                     let mut context_action = None;
                     let mut drag_commit = None;
                     for c in &clips {
+                        let (mut fade_in, mut fade_out) = (c.fade_in, c.fade_out);
+                        if let Some(d) = self
+                            .drag
+                            .as_ref()
+                            .filter(|d| d.id == c.id && d.edge.abs() == 2)
+                        {
+                            let delta = ticks(
+                                (ui.ctx().pointer_latest_pos().unwrap_or(d.origin).x - d.origin.x)
+                                    as f64
+                                    / self.zoom as f64,
+                            );
+                            if d.edge < 0 {
+                                fade_in = (fade_in + delta).clamp(0, c.duration);
+                            } else {
+                                fade_out = (fade_out - delta).clamp(0, c.duration);
+                            }
+                        }
                         let x = canvas.left() + seconds(c.start) as f32 * self.zoom;
                         let w = (seconds(c.duration) as f32 * self.zoom).max(2.);
                         let rect = Rect::from_min_size(
@@ -156,7 +178,13 @@ impl Editor {
                         if !rect.intersects(visible) {
                             continue;
                         }
-                        let selected = self.selected.as_ref() == Some(&c.id);
+                        let selected = self.selected.as_ref() == Some(&c.id)
+                            || c.link.as_ref().is_some_and(|group| {
+                                self.p.clips.iter().any(|x| {
+                                    self.selected.as_ref() == Some(&x.id)
+                                        && x.link.as_ref() == Some(group)
+                                })
+                            });
                         let muted = c.mute || self.p.tracks[c.lane].mute;
                         let color = if muted {
                             Color32::from_gray(64)
@@ -164,6 +192,7 @@ impl Editor {
                             [
                                 Color32::from_rgb(56, 83, 106),
                                 Color32::from_rgb(62, 98, 85),
+                                Color32::from_rgb(72, 88, 108),
                                 Color32::from_rgb(101, 81, 59),
                             ][c.lane]
                         };
@@ -185,13 +214,15 @@ impl Editor {
                         let m = self.p.media(&c.media).ok();
                         if let Some(m) = m {
                             clip_painter.text(
-                                rect.min + Vec2::new(7., 6.),
+                                rect.min + Vec2::new(7., 14.),
                                 Align2::LEFT_TOP,
-                                &m.name,
+                                format!("{}{}", if c.link.is_some() { "↔ " } else { "" }, m.name),
                                 FontId::proportional(12.),
                                 Color32::from_gray(225),
                             );
-                            if let Some(wave) = self.wave.get(&c.media) {
+                            if c.lane > 0
+                                && let Some(wave) = self.wave.get(&c.media)
+                            {
                                 let center = rect.top() + rect.height() * 0.65;
                                 let half = rect.height() * 0.22;
                                 let begin = rect.left().max(visible.left()).ceil() as i32;
@@ -209,14 +240,26 @@ impl Editor {
                                         .unwrap_or(&[])
                                         .iter()
                                         .copied()
-                                        .fold(0., f32::max)
-                                        * amp;
-                                    let env = (if c.fade_in > 0 {
-                                        (local as f64 / seconds(c.fade_in)).min(1.)
+                                        .fold(0., f32::max);
+                                    let peak = if self.waveform_auto {
+                                        (peak
+                                            / self
+                                                .wave_peak
+                                                .get(&c.media)
+                                                .copied()
+                                                .unwrap_or(1.)
+                                                .max(1e-8))
+                                        .clamp(0., 1.)
+                                        .sqrt()
+                                    } else {
+                                        peak * amp
+                                    };
+                                    let env = (if fade_in > 0 {
+                                        (local as f64 / seconds(fade_in)).min(1.)
                                     } else {
                                         1.
-                                    }) * (if c.fade_out > 0 {
-                                        ((seconds(c.duration) - local as f64) / seconds(c.fade_out))
+                                    }) * (if fade_out > 0 {
+                                        ((seconds(c.duration) - local as f64) / seconds(fade_out))
                                             .min(1.)
                                     } else {
                                         1.
@@ -235,7 +278,7 @@ impl Editor {
                                 }
                             }
                         }
-                        for (fade, left) in [(c.fade_in, true), (c.fade_out, false)] {
+                        for (fade, left) in [(fade_in, true), (fade_out, false)] {
                             if fade > 0 {
                                 let width = seconds(fade) as f32 * self.zoom;
                                 let points = if left {
@@ -253,11 +296,39 @@ impl Editor {
                                     .line_segment(points, Stroke::new(1., Color32::from_gray(225)));
                             }
                         }
+                        let handle_inset = (rect.width() / 2.).min(5.);
+                        let handles = [
+                            Pos2::new(
+                                (rect.left() + seconds(fade_in) as f32 * self.zoom)
+                                    .clamp(rect.left() + handle_inset, rect.right() - handle_inset),
+                                rect.top() + 5.,
+                            ),
+                            Pos2::new(
+                                (rect.right() - seconds(fade_out) as f32 * self.zoom)
+                                    .clamp(rect.left() + handle_inset, rect.right() - handle_inset),
+                                rect.top() + 5.,
+                            ),
+                        ];
+                        if rect.width() >= 14. {
+                            for handle in handles {
+                                clip_painter.rect_filled(
+                                    Rect::from_center_size(handle, Vec2::splat(7.)),
+                                    1.,
+                                    Color32::from_gray(225),
+                                );
+                            }
+                        }
                         let response =
                             ui.interact(rect, Id::new(("clip", &c.id)), Sense::click_and_drag());
                         trace(ui.ctx(), format!("clip:{}", c.id), &response);
                         if response.clicked() {
                             self.selected = Some(c.id.clone());
+                            if let Some(player) = &self.player {
+                                player.pause();
+                            }
+                            if let Some(pos) = response.interact_pointer_pos() {
+                                self.seek(ticks(((pos.x - canvas.left()) / self.zoom) as f64));
+                            }
                         }
                         if response.double_clicked() {
                             self.selected = Some(c.id.clone());
@@ -284,7 +355,15 @@ impl Editor {
                                 let initial = origin.x;
                                 self.drag = Some(Drag {
                                     id: c.id.clone(),
-                                    edge: if initial < rect.left() + 7. {
+                                    edge: if rect.width() >= 14.
+                                        && (origin - handles[0]).length() <= 10.
+                                    {
+                                        -2
+                                    } else if rect.width() >= 14.
+                                        && (origin - handles[1]).length() <= 10.
+                                    {
+                                        2
+                                    } else if initial < rect.left() + 7. {
                                         -1
                                     } else if initial > rect.right() - 7. {
                                         1
@@ -292,7 +371,6 @@ impl Editor {
                                         0
                                     },
                                     start: c.start,
-                                    source_in: c.source_in,
                                     duration: c.duration,
                                     lane: c.lane,
                                     origin,
@@ -302,17 +380,77 @@ impl Editor {
                                 }
                             }
                         }
-                        if let Some(d) = self.drag.as_ref().filter(|d| d.id == c.id) {
+                        if let Some(d) = self.drag.clone().filter(|d| d.id == c.id) {
                             if response.dragged() {
                                 let dx = ui.ctx().pointer_latest_pos().unwrap_or(d.origin).x
                                     - d.origin.x;
-                                let mut ghost = rect;
+                                let raw = ticks(dx as f64 / self.zoom as f64);
+                                let mut candidate = self.p.clone();
+                                if d.edge.abs() == 1 {
+                                    let requested = if d.edge < 0 {
+                                        d.start + raw
+                                    } else {
+                                        d.start + d.duration + raw
+                                    };
+                                    let edge = self.drag_edge(&d, requested);
+                                    if edit::trim_edge(&mut candidate, &d.id, d.edge < 0, edge)
+                                        .is_ok()
+                                    {
+                                        let preview =
+                                            candidate.clips.iter().find(|x| x.id == d.id).unwrap();
+                                        let source = if d.edge < 0 {
+                                            preview.source_in
+                                        } else {
+                                            preview.source_in + preview.duration
+                                                - self.p.fps.frame(1)
+                                        };
+                                        self.show_trim_source(&c.media, source);
+                                        self.status = format!(
+                                            "{} · source {:.3}s · duration {:.3}s",
+                                            if d.edge < 0 { "Trim start" } else { "Trim end" },
+                                            seconds(source),
+                                            seconds(preview.duration)
+                                        );
+                                    }
+                                } else if d.edge.abs() == 2 {
+                                    let value = if d.edge < 0 {
+                                        raw + c.fade_in
+                                    } else {
+                                        c.fade_out - raw
+                                    };
+                                    let value = value.clamp(0, c.duration);
+                                    let preview =
+                                        candidate.clips.iter_mut().find(|x| x.id == d.id).unwrap();
+                                    if d.edge < 0 {
+                                        preview.fade_in = value;
+                                    } else {
+                                        preview.fade_out = value;
+                                    }
+                                    self.seek(if d.edge < 0 {
+                                        c.start + value
+                                    } else {
+                                        c.end() - value
+                                    });
+                                    self.status = format!(
+                                        "Fade {} · {:.3}s",
+                                        if d.edge < 0 { "in" } else { "out" },
+                                        seconds(value)
+                                    );
+                                }
+                                let preview =
+                                    candidate.clips.iter().find(|x| x.id == d.id).unwrap();
+                                let mut ghost = Rect::from_min_size(
+                                    Pos2::new(
+                                        canvas.left() + seconds(preview.start) as f32 * self.zoom,
+                                        rect.top(),
+                                    ),
+                                    Vec2::new(
+                                        seconds(preview.duration) as f32 * self.zoom,
+                                        rect.height(),
+                                    ),
+                                );
                                 if d.edge == 0 {
                                     ghost = ghost.translate(Vec2::new(dx, 0.));
-                                } else if d.edge < 0 {
-                                    ghost.min.x += dx;
-                                } else {
-                                    ghost.max.x += dx;
                                 }
                                 painter.rect_stroke(
                                     ghost,
@@ -320,6 +458,29 @@ impl Editor {
                                     Stroke::new(2., Color32::WHITE),
                                     egui::StrokeKind::Inside,
                                 );
+                                if d.edge.abs() == 2 {
+                                    let value = if d.edge < 0 {
+                                        preview.fade_in
+                                    } else {
+                                        preview.fade_out
+                                    };
+                                    let x = if d.edge < 0 {
+                                        rect.left() + seconds(value) as f32 * self.zoom
+                                    } else {
+                                        rect.right() - seconds(value) as f32 * self.zoom
+                                    };
+                                    painter.line_segment(
+                                        [
+                                            if d.edge < 0 {
+                                                rect.left_bottom()
+                                            } else {
+                                                rect.right_bottom()
+                                            },
+                                            Pos2::new(x, rect.top()),
+                                        ],
+                                        Stroke::new(2., Color32::WHITE),
+                                    );
+                                }
                             }
                             if response.drag_stopped() {
                                 drag_commit = Some((
@@ -343,7 +504,25 @@ impl Editor {
                                     ui.close_menu();
                                 }
                             }
-                            if ui.button("Match voice loudness").clicked() {
+                            if ui
+                                .button(if c.link.is_some() {
+                                    "Unlink audio / video"
+                                } else {
+                                    "Link matching audio / video"
+                                })
+                                .clicked()
+                            {
+                                let id = c.id.clone();
+                                self.apply(|p| {
+                                    if c.link.is_some() {
+                                        edit::unlink(p, &id)
+                                    } else {
+                                        edit::link(p, &id)
+                                    }
+                                });
+                                ui.close_menu();
+                            }
+                            if c.lane > 0 && ui.button("Match voice loudness").clicked() {
                                 self.normalize();
                                 ui.close_menu();
                             }
@@ -364,81 +543,62 @@ impl Editor {
                                     at = self.playhead;
                                 }
                             }
-                            if d.lane == 0 {
-                                let target = at;
-                                self.apply(|p| {
-                                    let moving = p
-                                        .clips
-                                        .iter()
-                                        .find(|c| c.id == d.id)
-                                        .context("Clip removed")?
-                                        .clone();
-                                    anyhow::ensure!(!p.tracks[0].locked, "Track is locked");
-                                    if p.lane(0).iter().any(|c| {
-                                        c.id != d.id
-                                            && target < c.end()
-                                            && target + moving.duration > c.start
-                                    }) {
-                                        let mut ordered: Vec<_> = p
-                                            .lane(0)
-                                            .into_iter()
-                                            .filter(|c| c.id != d.id)
-                                            .cloned()
-                                            .collect();
-                                        let insert = ordered
-                                            .iter()
-                                            .position(|c| target < c.start + c.duration / 2)
-                                            .unwrap_or(ordered.len());
-                                        ordered.insert(insert, moving);
-                                        let mut cursor = 0;
-                                        for c in ordered {
-                                            let item =
-                                                p.clips.iter_mut().find(|v| v.id == c.id).unwrap();
-                                            item.start = cursor;
-                                            cursor += item.duration;
-                                        }
-                                    } else {
-                                        edit::move_clip(p, &d.id, target, 0)?;
-                                    }
-                                    Ok(())
-                                });
+                            let lane = if d.lane == 0 {
+                                0
                             } else {
-                                let lane = pos
-                                    .map(|p| {
-                                        ((p.y - top - ruler_h) / lane_h).floor().clamp(1., 2.)
-                                            as usize
-                                    })
-                                    .unwrap_or(d.lane);
-                                self.apply(|p| edit::move_clip(p, &d.id, at, lane));
-                            }
-                        } else {
-                            let mut edge = self.p.fps.align(if d.edge < 0 {
-                                d.start + raw
+                                pos.map(|p| {
+                                    ((p.y - top - ruler_h) / lane_h)
+                                        .floor()
+                                        .clamp(1., (LANES - 1) as f32)
+                                        as usize
+                                })
+                                .unwrap_or(d.lane)
+                            };
+                            self.apply(|p| edit::move_clip(p, &d.id, at, lane));
+                        } else if d.edge.abs() == 2 {
+                            let value = if d.edge < 0 {
+                                c_fade(&self.p, &d.id, true) + raw
                             } else {
-                                d.start + d.duration + raw
+                                c_fade(&self.p, &d.id, false) - raw
+                            };
+                            self.apply(|p| {
+                                let c = p
+                                    .clips
+                                    .iter_mut()
+                                    .find(|c| c.id == d.id)
+                                    .context("Clip removed")?;
+                                if d.edge < 0 {
+                                    c.fade_in = value.clamp(0, c.duration);
+                                } else {
+                                    c.fade_out = value.clamp(0, c.duration);
+                                }
+                                Ok(())
                             });
-                            if self.snapping {
-                                edge = edit::snap(&self.p, edge, tolerance, Some(&d.id));
-                            }
-                            if d.edge < 0 {
-                                let delta = edge - d.start;
-                                let source = d.source_in + delta;
-                                let duration = d.duration - delta;
-                                self.apply(|p| {
-                                    if d.lane == 0 {
-                                        edit::trim(p, &d.id, source, duration, true)
-                                    } else {
-                                        edit::trim(p, &d.id, source, duration, false)?;
-                                        let c = p.clips.iter_mut().find(|c| c.id == d.id).unwrap();
-                                        c.start = edge;
-                                        Ok(())
-                                    }
+                        } else {
+                            let edge = self.drag_edge(
+                                &d,
+                                if d.edge < 0 {
+                                    d.start + raw
+                                } else {
+                                    d.start + d.duration + raw
+                                },
+                            );
+                            let mut final_edge = None;
+                            self.apply(|p| {
+                                final_edge = Some(edit::trim_edge(p, &d.id, d.edge < 0, edge)?);
+                                Ok(())
+                            });
+                            if let Some(at) = final_edge {
+                                self.seek(if d.edge < 0 {
+                                    at
+                                } else {
+                                    at - self.p.fps.frame(1)
                                 });
-                            } else {
-                                self.apply(|p| {
-                                    edit::trim(p, &d.id, d.source_in, edge - d.start, d.lane == 0)
-                                });
                             }
+                        }
+                        self.source_preview = false;
+                        if self.preview_revision == Some(self.revision) {
+                            self.seek(self.playhead);
                         }
                     }
                     if ui.rect_contains_pointer(canvas.intersect(ui.clip_rect()))
@@ -449,7 +609,8 @@ impl Editor {
                     {
                         let lane = ((pos.y - canvas.top() - ruler_h) / lane_h)
                             .floor()
-                            .clamp(0., 2.) as usize;
+                            .clamp(0., (LANES - 1) as f32)
+                            as usize;
                         let mut at = self
                             .p
                             .fps
@@ -493,4 +654,37 @@ impl Editor {
                 });
         });
     }
+    fn drag_edge(&self, d: &Drag, at: Tick) -> Tick {
+        let tolerance = ticks(8. / self.zoom as f64);
+        let mut edge = self.p.fps.align(at);
+        if self.snapping {
+            let group = self
+                .p
+                .clips
+                .iter()
+                .find(|c| c.id == d.id)
+                .and_then(|c| c.link.as_ref());
+            if let Some(snap) = self
+                .p
+                .clips
+                .iter()
+                .filter(|c| c.id != d.id && (group.is_none() || c.link.as_ref() != group))
+                .flat_map(|c| [c.start, c.end()])
+                .chain([0, self.playhead])
+                .filter(|t| (*t - edge).abs() <= tolerance)
+                .min_by_key(|t| (*t - edge).abs())
+            {
+                edge = snap;
+            }
+        }
+        edge
+    }
+}
+
+fn c_fade(p: &Project, id: &str, left: bool) -> Tick {
+    p.clips
+        .iter()
+        .find(|c| c.id == id)
+        .map(|c| if left { c.fade_in } else { c.fade_out })
+        .unwrap_or(0)
 }

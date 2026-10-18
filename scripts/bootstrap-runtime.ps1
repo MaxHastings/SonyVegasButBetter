@@ -18,6 +18,17 @@ if ($sevenZip) { $extractor = $sevenZip.Source } else { $extractor = 'C:\Program
 if (!(Test-Path -LiteralPath $extractor)) { throw '7-Zip is required to extract libmpv. Install it or add 7z.exe to PATH.' }
 & $extractor x (Join-Path $runtimeDir 'mpv.7z') "-o$(Join-Path $runtimeDir 'mpv')" -y | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'libmpv extraction failed' }
+$sharedDir = Join-Path $runtimeDir 'ffmpeg-shared'
+Expand-Archive -LiteralPath (Join-Path $runtimeDir 'ffmpeg-shared.zip') -DestinationPath $sharedDir -Force
+$sharedArchive = [System.IO.Compression.ZipFile]::OpenRead((Join-Path $runtimeDir 'ffmpeg-shared.zip'))
+$sharedRootName = $sharedArchive.Entries[0].FullName.Split('/')[0]
+$sharedArchive.Dispose()
+$sharedBuild = Get-Item -LiteralPath (Join-Path $sharedDir $sharedRootName)
+$avDir = Join-Path $runtimeDir 'av'
+New-Item -ItemType Directory -Force $avDir | Out-Null
+foreach ($name in @('avutil-61.dll','swresample-7.dll','avcodec-63.dll','avformat-63.dll','swscale-10.dll')) {
+    Copy-Item -LiteralPath (Join-Path $sharedBuild.FullName "bin\$name") -Destination $avDir -Force
+}
 foreach ($item in $manifest.binaries) {
     $actualHash = (Get-FileHash -LiteralPath (Join-Path $runtimeDir $item.path) -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actualHash -ne $item.sha256) { throw "Binary checksum mismatch: $($item.path)" }

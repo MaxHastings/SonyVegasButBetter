@@ -36,6 +36,7 @@ fn trace(ctx: &egui::Context, name: impl AsRef<str>, response: &egui::Response) 
 enum Event {
     Imported(Result<Media>),
     Wave(String, Result<Vec<f32>>),
+    WaveChunk(String, usize, Vec<f32>),
     Thumbnail(String, Vec<u8>),
     ImportDone,
     Preview(u64, Result<PreviewPlan>),
@@ -45,6 +46,7 @@ enum Event {
     Loudness(String, Tick, Tick, Result<(f64, f64)>),
     Progress(f32),
     Rendered(PathBuf, Result<()>),
+    Encoding(render::Encoder),
     Autosaved(Result<()>),
 }
 #[derive(Clone)]
@@ -54,7 +56,6 @@ struct Drag {
     id: String,
     edge: i8,
     start: Tick,
-    source_in: Tick,
     duration: Tick,
     lane: usize,
     origin: Pos2,
@@ -186,8 +187,13 @@ struct Editor {
     playhead: Tick,
     zoom: f32,
     snapping: bool,
+    waveform_auto: bool,
+    asset_cancel: Arc<AtomicBool>,
+    source_preview: bool,
+    play_when_ready: bool,
     drag: Option<Drag>,
     wave: HashMap<String, Vec<f32>>,
+    wave_peak: HashMap<String, f32>,
     thumb: HashMap<String, egui::TextureHandle>,
     texture: Option<egui::TextureHandle>,
     status: String,
@@ -211,6 +217,10 @@ struct Editor {
     render_job: Option<Arc<AtomicBool>>,
     render_progress: f32,
     rendered: Option<PathBuf>,
+    encoder: render::Encoder,
+    encoder_used: Option<render::Encoder>,
+    render_started: Option<Instant>,
+    render_duration: Tick,
     close_pending: bool,
     pending_open: Option<Option<PathBuf>>,
     confirm_unsaved: bool,
@@ -293,12 +303,17 @@ impl Editor {
             media_selected: None,
             scroll_to_media: false,
             scroll_to_clip: None,
-            audio_lane: 1,
+            audio_lane: 2,
             playhead: 0,
             zoom: 50.,
             snapping: true,
+            waveform_auto: true,
+            asset_cancel: Arc::new(AtomicBool::new(false)),
+            source_preview: false,
+            play_when_ready: false,
             drag: None,
             wave: HashMap::new(),
+            wave_peak: HashMap::new(),
             thumb: HashMap::new(),
             texture: None,
             status: "Ready — drop recordings here or import media (Ctrl+I)".into(),
@@ -322,6 +337,10 @@ impl Editor {
             render_job: None,
             render_progress: 0.,
             rendered: None,
+            encoder: render::Encoder::Auto,
+            encoder_used: None,
+            render_started: None,
+            render_duration: 0,
             close_pending: false,
             pending_open: None,
             confirm_unsaved: false,
@@ -343,7 +362,11 @@ impl Editor {
             let harness = harness::Harness::new(stage.to_string_lossy().as_ref());
             app.recovery_available = false;
             app.recovery = harness.root.join("gui-recovery.svbb");
-            app.path = Some(harness.root.join("gui-session.svbb"));
+            app.path = Some(harness.root.join(if stage == "qol" {
+                "gui-qol.svbb"
+            } else {
+                "gui-session.svbb"
+            }));
             if stage == "crash-read"
                 && let Ok(bytes) = std::fs::read(harness.root.join("gui-report-crash-write.json"))
                 && let Ok(report) = serde_json::from_slice::<serde_json::Value>(&bytes)
@@ -417,6 +440,7 @@ impl Editor {
         }
         self.importing = true;
         let tx = self.tx.clone();
+        let cancel = self.asset_cancel.clone();
         let existing: Vec<_> = self.p.media.iter().map(|m| m.path.clone()).collect();
         std::thread::spawn(move || {
             let mut all = vec![];
@@ -431,20 +455,31 @@ impl Editor {
                 let _ = tx.send(Event::Imported(result));
             }
             let _ = tx.send(Event::ImportDone);
-            for m in all {
+            for m in &all {
                 if m.video.is_some()
-                    && let Ok(data) = rt.thumbnail(&m)
+                    && let Ok(data) = rt.thumbnail(m)
                 {
                     let _ = tx.send(Event::Thumbnail(m.id.clone(), data));
                 }
-                let _ = tx.send(Event::Wave(m.id.clone(), rt.waveform(&m)));
+            }
+            all.sort_by_key(|m| m.duration);
+            for m in all {
+                if cancel.load(Ordering::Relaxed) {
+                    break;
+                }
+                let result = rt.waveform_progress(&m, &cancel, |offset, peaks| {
+                    let _ = tx.send(Event::WaveChunk(m.id.clone(), offset, peaks));
+                });
+                let _ = tx.send(Event::Wave(m.id.clone(), result));
             }
         });
         self.status = "Inspecting and decoding imported files…".into();
     }
     fn index_all(&mut self) {
         if let Some(rt) = self.rt.clone() {
-            let media = self.p.media.clone();
+            let mut media = self.p.media.clone();
+            media.sort_by_key(|m| m.duration);
+            let cancel = self.asset_cancel.clone();
             let tx = self.tx.clone();
             std::thread::spawn(move || {
                 for m in media {
@@ -456,7 +491,13 @@ impl Editor {
                     {
                         let _ = tx.send(Event::Thumbnail(m.id.clone(), data));
                     }
-                    let _ = tx.send(Event::Wave(m.id.clone(), rt.waveform(&m)));
+                    if cancel.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let result = rt.waveform_progress(&m, &cancel, |offset, peaks| {
+                        let _ = tx.send(Event::WaveChunk(m.id.clone(), offset, peaks));
+                    });
+                    let _ = tx.send(Event::Wave(m.id.clone(), result));
                 }
             });
         }
@@ -541,6 +582,13 @@ impl Editor {
     }
     fn reset(&mut self, p: Project, path: Option<PathBuf>) {
         if let Some(player) = &self.player {
+            player.send(&["stop"]);
+        }
+        self.asset_cancel.store(true, Ordering::Relaxed);
+        self.asset_cancel = Arc::new(AtomicBool::new(false));
+        self.source_preview = false;
+        self.play_when_ready = false;
+        if let Some(player) = &self.player {
             player.pause();
             player.send(&["stop"]);
         }
@@ -580,14 +628,37 @@ impl Editor {
         }
     }
     fn seek(&mut self, t: Tick) {
+        self.source_preview = false;
         self.playhead = self.p.fps.align(t.clamp(0, self.p.duration()));
+        if let Some(player) = &self.player {
+            player.pause();
+        }
         if self.preview_revision == Some(self.revision)
             && let Some(player) = &self.player
         {
             player.seek(self.playhead);
         }
     }
+    fn show_trim_source(&mut self, media: &str, source: Tick) {
+        if let (Some(player), Ok(m)) = (&self.player, self.p.media(media))
+            && m.video.is_some()
+        {
+            player.show_source(
+                m.clone(),
+                source.clamp(0, (m.duration - self.p.fps.frame(1)).max(0)),
+            );
+            self.source_preview = true;
+        }
+    }
     fn play(&mut self) {
+        if self.p.duration() == 0 {
+            self.play_when_ready = false;
+            self.status = "Add media to the timeline to play".into();
+            return;
+        }
+        if self.source_preview {
+            self.seek(self.playhead);
+        }
         if self.preview_revision == Some(self.revision) {
             if let Some(player) = &self.player {
                 if self.playhead >= self.p.duration() {
@@ -598,9 +669,8 @@ impl Editor {
             }
         } else {
             self.preview_failed_revision = None;
-            self.status =
-                "The changed mix is still preparing. Playback becomes available when it is ready."
-                    .into();
+            self.play_when_ready = true;
+            self.status = "Opening source playback…".into();
             self.begin_preview();
         }
     }
@@ -653,20 +723,34 @@ impl Editor {
             _ => {}
         }
         settings.quality = self.quality;
+        settings.encoder = self.encoder;
         if let Err(e) = render::plan(&self.p, &settings) {
             self.error = Some(e.to_string());
             return;
         }
         self.render_progress = 0.;
+        self.render_started = Some(Instant::now());
+        self.encoder_used = None;
+        self.render_duration = self.p.duration();
         self.rendered = None;
         let cancel = Arc::new(AtomicBool::new(false));
         self.render_job = Some(cancel.clone());
         let p = self.p.clone();
         let tx = self.tx.clone();
         std::thread::spawn(move || {
-            let result = render::export(&rt, &p, &settings, &path, &cancel, |n| {
-                let _ = tx.send(Event::Progress(n));
-            });
+            let result = render::export_report(
+                &rt,
+                &p,
+                &settings,
+                &path,
+                &cancel,
+                |n| {
+                    let _ = tx.send(Event::Progress(n));
+                },
+                |encoder| {
+                    let _ = tx.send(Event::Encoding(encoder));
+                },
+            );
             let _ = tx.send(Event::Rendered(path, result));
         });
     }
@@ -675,8 +759,7 @@ impl Editor {
             match event {
                 Event::PreviewProgress(rev, name, n) => {
                     if rev == self.revision {
-                        self.status =
-                            format!("Preparing playback cache: {name} — {:.0}%", n * 100.);
+                        self.status = format!("Opening source playback: {name} — {:.0}%", n * 100.);
                     }
                 }
                 Event::Imported(result) => match result {
@@ -705,11 +788,32 @@ impl Editor {
                         "Media imported. Double-click a file to append it, or drag it onto a lane."
                             .into();
                 }
+                Event::WaveChunk(id, offset, peaks) => {
+                    if self.p.media.iter().any(|m| m.id == id) {
+                        let peak = peaks.iter().copied().fold(0., f32::max);
+                        self.wave_peak
+                            .entry(id.clone())
+                            .and_modify(|v| *v = v.max(peak))
+                            .or_insert(peak);
+                        let wave = self.wave.entry(id).or_default();
+                        if wave.len() == offset {
+                            wave.extend(peaks);
+                        }
+                    }
+                }
                 Event::Wave(id, result) => match result {
                     Ok(w) => {
-                        self.wave.insert(id, w);
+                        if self.p.media.iter().any(|m| m.id == id) {
+                            self.wave_peak
+                                .insert(id.clone(), w.iter().copied().fold(0., f32::max));
+                            self.wave.insert(id, w);
+                        }
                     }
-                    Err(e) => self.error = Some(format!("Waveform: {e}")),
+                    Err(e) => {
+                        if e.to_string() != "Cancelled" {
+                            self.status = format!("Waveform unavailable: {e}");
+                        }
+                    }
                 },
                 Event::Thumbnail(id, data) => {
                     if let Ok(img) = image::load_from_memory(&data) {
@@ -733,7 +837,8 @@ impl Editor {
                         match result {
                             Ok(plan) => {
                                 if let Some(player) = &self.player {
-                                    player.load(plan, self.playhead, false);
+                                    player.load(plan, self.playhead, self.play_when_ready);
+                                    self.play_when_ready = false;
                                 }
                                 self.preview_revision = Some(rev);
                                 self.status = "Preview ready".into();
@@ -824,7 +929,13 @@ impl Editor {
                         Err(e) => self.error = Some(e.to_string()),
                     }
                 }
-                Event::Progress(n) => self.render_progress = n,
+                Event::Progress(n) => {
+                    if n < self.render_progress {
+                        self.render_started = Some(Instant::now());
+                    }
+                    self.render_progress = n;
+                }
+                Event::Encoding(encoder) => self.encoder_used = Some(encoder),
                 Event::Rendered(path, result) => {
                     self.render_job = None;
                     match result {
@@ -849,7 +960,8 @@ impl Editor {
         if self.preview_revision != Some(self.revision)
             && self.preview_failed_revision != Some(self.revision)
             && self.preview_job.is_none()
-            && self.last_edit.elapsed() > Duration::from_millis(300)
+            && self.drag.is_none()
+            && self.last_edit.elapsed() > Duration::from_millis(40)
         {
             self.begin_preview();
         }
@@ -903,6 +1015,20 @@ impl Editor {
             Action::Play => self.play(),
             Action::Split => {
                 let at = self.playhead;
+                if self.selected.as_ref().is_none_or(|id| {
+                    !self
+                        .p
+                        .clips
+                        .iter()
+                        .any(|c| &c.id == id && at > c.start && at < c.end())
+                }) {
+                    self.selected = self
+                        .p
+                        .lane(0)
+                        .into_iter()
+                        .find(|c| at > c.start && at < c.end())
+                        .map(|c| c.id.clone());
+                }
                 self.edit_selected(|p, id| {
                     edit::split(p, id, at)?;
                     Ok(())
@@ -1090,8 +1216,9 @@ impl eframe::App for Editor {
             });
         egui::TopBottomPanel::bottom("timeline-panel")
             .resizable(true)
-            .default_height(370.)
-            .min_height(280.)
+            .default_height(410.)
+            .min_height(330.)
+            .max_height((ctx.screen_rect().height() - 240.).max(330.))
             .show(ctx, |ui| self.timeline(ui));
         egui::SidePanel::left("media-panel")
             .resizable(true)
@@ -1113,6 +1240,7 @@ impl eframe::App for Editor {
         ctx.request_repaint_after(Duration::from_millis(16));
     }
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.asset_cancel.store(true, Ordering::Relaxed);
         if let Some((_, cancel, worker)) = self.preview_job.take() {
             cancel.store(true, Ordering::Relaxed);
             let _ = worker.join();

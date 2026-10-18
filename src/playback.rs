@@ -1,25 +1,20 @@
-//! The only native media FFI boundary. libmpv's stable C API owns decoding,
-//! timestamp seeking, synchronized audio output and its worker threads.
+//! libmpv client/stream ABI boundary. Native FFmpeg workers supply video and
+//! seekable float audio; libmpv owns buffering, the device clock and output.
 use crate::{media::Runtime, model::*, render::PreviewPlan};
 use anyhow::{Context, Result, ensure};
 use libloading::Library;
+use std::ptr;
 use std::{
     ffi::{CStr, CString, c_char, c_void},
-    ptr,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
         mpsc,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
-#[repr(C)]
-struct Param {
-    kind: i32,
-    data: *mut c_void,
-}
 #[repr(C)]
 struct Event {
     kind: i32,
@@ -63,11 +58,13 @@ struct Api {
     event: unsafe extern "C" fn(Handle, f64) -> *const Event,
     log: unsafe extern "C" fn(Handle, *const c_char) -> i32,
     destroy: unsafe extern "C" fn(Handle),
-    render_create: unsafe extern "C" fn(*mut Handle, Handle, *mut Param) -> i32,
-    render_update: unsafe extern "C" fn(Handle) -> u64,
-    render: unsafe extern "C" fn(Handle, *mut Param) -> i32,
-    render_free: unsafe extern "C" fn(Handle),
     free_node: unsafe extern "C" fn(*mut Node),
+    add_stream: unsafe extern "C" fn(
+        Handle,
+        *const c_char,
+        *mut c_void,
+        extern "C" fn(*mut c_void, *mut c_char, *mut crate::audio::StreamInfo) -> i32,
+    ) -> i32,
 }
 impl Api {
     fn load(rt: &Runtime) -> Result<Self> {
@@ -84,11 +81,8 @@ impl Api {
                 event: *library.get(b"mpv_wait_event\0")?,
                 log: *library.get(b"mpv_request_log_messages\0")?,
                 destroy: *library.get(b"mpv_terminate_destroy\0")?,
-                render_create: *library.get(b"mpv_render_context_create\0")?,
-                render_update: *library.get(b"mpv_render_context_update\0")?,
-                render: *library.get(b"mpv_render_context_render\0")?,
-                render_free: *library.get(b"mpv_render_context_free\0")?,
                 free_node: *library.get(b"mpv_free_node_contents\0")?,
+                add_stream: *library.get(b"mpv_stream_cb_add_ro\0")?,
                 _library: library,
             })
         }
@@ -182,6 +176,8 @@ pub struct Frame {
 }
 enum Control {
     Command(Vec<String>),
+    Seek(Tick),
+    Source(Media, Tick),
     Load(PreviewPlan, Tick, bool),
     Stop,
 }
@@ -230,6 +226,7 @@ impl Player {
         let fr = frame.clone();
         let stopping = stop.clone();
         let (init_tx, init_rx) = mpsc::sync_channel(1);
+        let runtime = rt.clone();
         let worker = thread::spawn(move || {
             // Handle is used by one command thread; render context has a separate
             // owner thread. libmpv explicitly permits this concurrent separation.
@@ -240,7 +237,7 @@ impl Player {
             }
             let init = (|| -> Result<()> {
                 for (key, value) in [
-                    ("vo", "libmpv"),
+                    ("vo", "null"),
                     ("config", "no"),
                     ("terminal", "no"),
                     ("input-default-bindings", "no"),
@@ -254,6 +251,9 @@ impl Player {
                     ("audio-file-auto", "no"),
                     ("sub-auto", "no"),
                     ("vd-lavc-threads", "4"),
+                    ("demuxer-readahead-secs", "1"),
+                    ("demuxer-max-bytes", "2MiB"),
+                    ("demuxer-max-back-bytes", "1MiB"),
                     ("hr-seek-framedrop", "no"),
                     (
                         "af",
@@ -291,124 +291,122 @@ impl Player {
                 }
                 return;
             }
-            let render_api = api.clone();
-            let render_stop = stopping.clone();
-            let render_state = st.clone();
-            let handle_bits = h as usize;
-            let (ready_tx, ready_rx) = mpsc::sync_channel(1);
-            let renderer = thread::spawn(move || {
-                let h = handle_bits as Handle;
-                let mut ctx = ptr::null_mut();
-                let mut params = [
-                    Param {
-                        kind: 1,
-                        data: c"sw".as_ptr() as *mut c_void,
-                    },
-                    Param {
-                        kind: 0,
-                        data: ptr::null_mut(),
-                    },
-                ];
-                let r = unsafe { (render_api.render_create)(&mut ctx, h, params.as_mut_ptr()) };
-                let _ = ready_tx.send(r);
-                if r < 0 {
-                    return;
-                }
-                // u32 storage guarantees the pixel alignment required by rgb0.
-                let (w, height) = (960usize, 540usize);
-                let mut pixels = vec![0u32; w * height];
-                let mut size = [w as i32, height as i32];
-                let mut stride = w * 4;
-                let mut block = 0i32;
-                let mut seq = 0;
-                while !render_stop.load(Ordering::Relaxed) {
-                    if unsafe { (render_api.render_update)(ctx) } & 1 != 0 {
-                        let mut params = [
-                            Param {
-                                kind: 17,
-                                data: size.as_mut_ptr().cast(),
-                            },
-                            Param {
-                                kind: 18,
-                                data: c"rgb0".as_ptr() as *mut c_void,
-                            },
-                            Param {
-                                kind: 19,
-                                data: (&mut stride as *mut usize).cast(),
-                            },
-                            Param {
-                                kind: 20,
-                                data: pixels.as_mut_ptr().cast(),
-                            },
-                            Param {
-                                kind: 12,
-                                data: (&mut block as *mut i32).cast(),
-                            },
-                            Param {
-                                kind: 0,
-                                data: ptr::null_mut(),
-                            },
-                        ];
-                        let r = unsafe { (render_api.render)(ctx, params.as_mut_ptr()) };
-                        if r >= 0 {
-                            seq += 1;
-                            let mut bytes = Vec::with_capacity(w * height * 4);
-                            for pixel in &pixels {
-                                let mut p = pixel.to_ne_bytes();
-                                p[3] = 255;
-                                bytes.extend_from_slice(&p);
-                            }
-                            if let Ok(mut f) = fr.try_lock() {
-                                *f = Some(Frame {
-                                    pixels: bytes,
-                                    width: w,
-                                    height,
-                                    sequence: seq,
-                                });
-                            }
-                            if let Ok(mut s) = render_state.try_lock() {
-                                s.frames = seq;
-                            }
-                        }
-                    }
-                    thread::sleep(Duration::from_millis(3));
-                }
+            let mut factory = Box::new(crate::audio::Factory {
+                rt: runtime.clone(),
+                project: Mutex::new(Project::default()),
+                error: Arc::new(Mutex::new(None)),
+            });
+            let registration = unsafe {
+                (api.add_stream)(
+                    h,
+                    c"svbb".as_ptr(),
+                    (&mut *factory as *mut crate::audio::Factory).cast(),
+                    crate::audio::open,
+                )
+            };
+            if registration < 0 {
+                let _ = init_tx.send(Err("Cannot register native audio stream".into()));
                 unsafe {
-                    (render_api.render_free)(ctx);
+                    (api.destroy)(h);
                 }
-            });
-            let ready = ready_rx.recv().unwrap_or(-1);
-            let _ = init_tx.send(if ready >= 0 {
-                Ok(())
-            } else {
-                Err("Cannot initialize video renderer".into())
-            });
+                return;
+            }
+            let mut video = crate::video::VideoWorker::new(runtime, fr.clone());
+            let _ = init_tx.send(Ok(()));
+            let mut project: Option<Project> = None;
+            let mut source_override: Option<(Media, Tick)> = None;
+            let mut desired = 0;
+            let mut anchor: Option<(Tick, Instant)> = None;
+            let mut last_audio = None;
             let mut pending_seek = None;
             let mut should_play = false;
+            let mut awaiting_seek: Option<bool> = None;
             while !stopping.load(Ordering::Relaxed) {
+                let mut seek = None;
                 for cmd in rx.try_iter() {
                     let result = match cmd {
-                        Control::Command(args) => api.send(h, &args),
+                        Control::Seek(at) => {
+                            anchor = None;
+                            last_audio = None;
+                            source_override = None;
+                            desired = at;
+                            seek = Some(at);
+                            Ok(())
+                        }
+                        Control::Source(media, at) => {
+                            source_override = Some((media, at));
+                            let _ = api.send(h, &["set".into(), "pause".into(), "yes".into()]);
+                            Ok(())
+                        }
+                        Control::Command(args) => {
+                            if args.first().is_some_and(|s| s == "stop") {
+                                project = None;
+                                source_override = None;
+                                should_play = false;
+                                desired = 0;
+                                anchor = None;
+                                last_audio = None;
+                                awaiting_seek = None;
+                                pending_seek = None;
+                                video.request(None, 0, 1.);
+                                st.lock().unwrap().loaded = false;
+                            }
+                            if args.first().is_some_and(|s| s == "cycle")
+                                && args.get(1).is_some_and(|s| s == "pause")
+                            {
+                                should_play = if seek.is_some() || awaiting_seek.is_some() {
+                                    !should_play
+                                } else {
+                                    st.lock().unwrap().paused
+                                };
+                            }
+                            if args.first().is_some_and(|s| s == "set")
+                                && args.get(1).is_some_and(|s| s == "pause")
+                                && args.get(2).is_some_and(|s| s == "yes")
+                            {
+                                should_play = false;
+                            }
+                            if args.first().is_some_and(|s| s == "cycle")
+                                && args.get(1).is_some_and(|s| s == "pause")
+                                && (seek.is_some() || awaiting_seek.is_some())
+                            {
+                                Ok(())
+                            } else {
+                                api.send(h, &args)
+                            }
+                        }
                         Control::Stop => {
                             stopping.store(true, Ordering::Relaxed);
                             Ok(())
                         }
                         Control::Load(plan, at, play) => {
+                            awaiting_seek = None;
+                            anchor = None;
+                            last_audio = None;
                             if let Ok(mut s) = st.lock() {
                                 s.loaded = false;
                                 s.error = None;
                             }
+                            *factory.project.lock().unwrap() = plan.project.clone();
+                            let filter = format!(
+                                "{},@meter:astats=metadata=1:reset=1:measure_overall=none",
+                                crate::render::master(plan.project.peak_protection)
+                            );
+                            project = Some(plan.project);
+                            source_override = None;
+                            desired = at;
                             pending_seek = Some(at);
                             should_play = play;
                             let _ = api.send(h, &["stop".into()]);
                             let _ = api.send(h, &["set".into(), "pause".into(), "yes".into()]);
                             let _ =
-                                api.send(h, &["set".into(), "lavfi-complex".into(), plan.graph]);
+                                api.send(h, &["set".into(), "lavfi-complex".into(), String::new()]);
+                            let _ = api.send(h, &["set".into(), "af".into(), filter]);
                             api.send(
                                 h,
                                 &[
                                     "loadfile".into(),
-                                    plan.combined.to_string_lossy().into(),
+                                    "svbb://timeline.wav".into(),
                                     "replace".into(),
                                 ],
                             )
@@ -420,6 +418,15 @@ impl Player {
                         s.error = Some(e.to_string());
                     }
                 }
+                if let Some(at) = seek {
+                    if pending_seek.is_some() {
+                        pending_seek = Some(at);
+                    } else {
+                        let _ = api.send(h, &["set".into(), "pause".into(), "yes".into()]);
+                        awaiting_seek = Some(false);
+                        let _ = api.send(h, &["seek".into(), decimal(at), "absolute+exact".into()]);
+                    }
+                }
                 loop {
                     let e = unsafe { &*(api.event)(h, 0.) };
                     if e.kind == 0 {
@@ -427,15 +434,26 @@ impl Player {
                     }
                     if e.kind == 8 {
                         // MPV_EVENT_FILE_LOADED
-                        if let Some(at) = pending_seek.take() {
+                        let at = pending_seek.take().unwrap_or(0);
+                        if at > 0 {
+                            awaiting_seek = Some(false);
                             let _ =
                                 api.send(h, &["seek".into(), decimal(at), "absolute+exact".into()]);
                         }
-                        if should_play {
+                        if should_play && at == 0 {
                             let _ = api.send(h, &["set".into(), "pause".into(), "no".into()]);
                         }
                         if let Ok(mut s) = st.lock() {
                             s.loaded = true;
+                        }
+                    }
+                    if e.kind == 20 && awaiting_seek.is_some() {
+                        awaiting_seek = Some(true);
+                    }
+                    if e.kind == 21 && awaiting_seek == Some(true) {
+                        awaiting_seek = None;
+                        if should_play {
+                            let _ = api.send(h, &["set".into(), "pause".into(), "no".into()]);
                         }
                     }
                     if e.kind == 2 && !e.data.is_null() {
@@ -459,17 +477,86 @@ impl Player {
                 unsafe {
                     (api.get)(h, c"pause".as_ptr(), 3, (&mut paused as *mut i32).cast());
                 }
-                if let Ok(mut s) = st.lock() {
-                    if let Some(pos) = pos {
-                        s.position = ticks(pos);
+                let mut eof = 0i32;
+                unsafe {
+                    (api.get)(h, c"eof-reached".as_ptr(), 3, (&mut eof as *mut i32).cast());
+                }
+                if eof != 0 && should_play && pending_seek.is_none() && awaiting_seek.is_none() {
+                    if let Some(p) = &project {
+                        desired = p.duration();
                     }
+                    should_play = false;
+                }
+                if let Ok(mut s) = st.lock() {
+                    if eof == 0
+                        && paused == 0
+                        && pending_seek.is_none()
+                        && awaiting_seek.is_none()
+                        && let Some(pos) = pos
+                    {
+                        let audio = ticks(pos);
+                        if last_audio != Some(audio) {
+                            anchor = Some((audio, Instant::now()));
+                            last_audio = Some(audio);
+                        }
+                        desired = anchor
+                            .map(|(at, time)| at + ticks(time.elapsed().as_secs_f64()))
+                            .unwrap_or(audio);
+                    } else if paused != 0 {
+                        anchor = None;
+                        last_audio = None;
+                    }
+                    s.position = desired;
                     s.paused = paused != 0;
                     s.peak_db = if paused == 0 { peaks } else { [-120.; 2] };
+                }
+                if let Some((media, at)) = &source_override {
+                    video.request(Some(media), *at, 1.);
+                } else if let Some(p) = &project {
+                    let at = desired.clamp(0, (p.duration() - p.fps.frame(1)).max(0));
+                    let frame_index =
+                        (at as i128 * p.fps.num as i128 / (HZ as i128 * p.fps.den as i128)) as i64;
+                    let at = p.fps.frame(frame_index);
+                    if let Some(c) = p
+                        .clips
+                        .iter()
+                        .find(|c| c.lane == 0 && at >= c.start && at < c.end())
+                    {
+                        let local = at - c.start;
+                        let opacity = if c.mute || p.tracks[0].mute {
+                            0.
+                        } else {
+                            (if c.fade_in > 0 {
+                                seconds(local) / seconds(c.fade_in)
+                            } else {
+                                1.
+                            })
+                            .min(1.)
+                                * (if c.fade_out > 0 {
+                                    seconds(c.duration - local) / seconds(c.fade_out)
+                                } else {
+                                    1.
+                                })
+                                .min(1.)
+                        };
+                        video.request(p.media(&c.media).ok(), c.source_in + local, opacity);
+                    } else {
+                        video.request(None, 0, 1.);
+                    }
+                }
+                if let Some(error) = factory.error.lock().unwrap().take() {
+                    st.lock().unwrap().error = Some(error);
+                }
+                if let Some(error) = video.error.lock().unwrap().take() {
+                    st.lock().unwrap().error = Some(error);
+                }
+                if let Some(frame) = fr.lock().unwrap().as_ref() {
+                    st.lock().unwrap().frames = frame.sequence;
                 }
                 thread::sleep(Duration::from_millis(8));
             }
             // Keep the command core alive until the render context has been freed.
-            let _ = renderer.join();
+            drop(video);
             unsafe {
                 (api.destroy)(h);
             }
@@ -499,7 +586,10 @@ impl Player {
         ));
     }
     pub fn seek(&self, at: Tick) {
-        self.send(&["seek", &decimal(at), "absolute+exact"]);
+        let _ = self.tx.send(Control::Seek(at));
+    }
+    pub fn show_source(&self, media: Media, at: Tick) {
+        let _ = self.tx.send(Control::Source(media, at));
     }
     pub fn pause(&self) {
         self.send(&["set", "pause", "yes"]);

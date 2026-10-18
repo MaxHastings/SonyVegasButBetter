@@ -4,14 +4,14 @@ An `.svbb` file is an ordinary SQLite database, independent of the UI and media
 implementation. Integers store ticks at 282,240,000 Hz. UTF-8 paths and stable
 UUID strings identify sources/entities. `PRAGMA user_version` is the schema version.
 
-Current version: **2**.
+Current version: **3**.
 
 | Table | Authoritative fields |
 |---|---|
 | project | id, name, width, height, fps_num, fps_den, peak_protection |
 | media | id, path, metadata JSON |
-| tracks | lane (0..2), name, gain_db, mute, locked |
-| clips | id, media FK, lane FK, start, source_in, duration, gain_db, mute, fade_in, fade_out |
+| tracks | lane (0..3), name, gain_db, mute, locked |
+| clips | id, media FK, lane FK, start, source_in, duration, gain_db, mute, fade_in, fade_out, nullable link |
 
 Media metadata JSON contains the plain Rust Media representation: duration,
 dimensions, file size, sample rate/channels, rational frame rate, optional first
@@ -25,6 +25,17 @@ stored here. A future implementation can understand edits using these tables,
 the timebase and the processing semantics documented in ARCHITECTURE.md.
 
 ## Compatibility and migration
+
+Version 2→3 adds `link` and a fourth track. Old external audio lanes 1/2 become
+2/3. Every old V1 clip with source audio gains a separate linked A1 clip, preserving
+its old source range, gain, mute and audio fades. Old V1 track audio gain/mute moves
+to A1. V1 becomes video-only with no newly introduced visual fades. This preserves
+the audible edit. A `.vN.backup` is retained before migration. Foreign keys are
+transactionally deferred while lane IDs are remapped.
+
+Link IDs identify exactly one video and one audio clip with matching media, start,
+source_in and duration. Link IDs need not be clip IDs. Empty/unlinked clips store NULL.
+Fades on V1 now mean fade-to/from-black; fades on audio lanes mean linear volume fades.
 
 Version 1 had the same tables without clip fade columns. Migration 1→2 adds
 `fade_in` and `fade_out`, default zero, in a transaction. Version 0 is initialized

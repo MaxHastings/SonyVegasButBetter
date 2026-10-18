@@ -1,101 +1,86 @@
 # Architecture
 
-Dependency direction: native UI → commands/project model → plain owned data.
-Persistence and media adapters depend on that data; the model never imports egui,
-SQLite or FFmpeg types.
+The native UI depends on plain project data and atomic commands. Media and persistence
+adapters consume that data. FFmpeg, SQLite and egui types never enter the project model.
 
-* `model`: version-independent project, assets, stream metadata, clips and tracks.
-* `edit`: atomic copy/validate/commit commands and bounded snapshot undo/redo.
-* `persistence`: normalized SQLite tables, migrations and atomic replacement saves.
-* `media`: runtime discovery, probing, decode validation, waveform/thumbnail cache,
-  and integrated LUFS/true-peak measurements on worker threads.
-* `render`: deterministic timeline evaluation and shared audio filters; cancellable
-  FFmpeg jobs and independent ffprobe/output decode validation.
-* `playback`: isolated libmpv C ABI, persistent decoders, EDL compiler products,
-  separate command and rendering threads, synchronized audio and video.
-* `ui`: native eframe window, resizable panels and bespoke timeline. Opt-in GUI
-  regression code feeds raw events to this same window and widgets.
+* `model`: integer time, media metadata, four tracks, clips and explicit A/V links.
+* `edit`: copy/validate/commit commands, linked operations and bounded undo/redo.
+* `persistence`: SQLite schema 3, explicit migrations and atomic replacement saves.
+* `media`: source probes, progressive waveform/thumbnail indexing and loudness jobs.
+* `video` and `native/video.cpp`: persistent FFmpeg decoding and RGBA conversion.
+* `audio`: seekable, on-demand stereo float timeline mixing on mpv's demux thread.
+* `playback`: narrow libmpv ABI, device output, buffering, limiter and output meter.
+* `render`: offline FFmpeg graph planning, encoder probing, cancellation and validation.
+* `ui`: native eframe panels, direct timeline manipulation and raw-input GUI tests.
 
-## Time
+## Time and source decoding
 
-Authoritative time is signed integer ticks at 282,240,000 ticks/second. This
-represents common frame rates (including 30000/1001 and 60000/1001) and 44.1/48 kHz
-sample positions exactly. Rational stream timebases and original start PTS are
-retained. Arithmetic conversions use i128 intermediates. Decimal seconds occur
-only at UI/native media boundaries; they are never accumulated to form an edit.
+Authoritative time is integer ticks at 282,240,000 Hz. This represents common broadcast
+frame rates and 44.1/48 kHz samples exactly. Rational stream timebases, original start
+PTS and offsets from the container origin remain available. Conversions use i128;
+floating point is confined to UI and native API boundaries.
 
-Source timestamps determine decoding, including VFR. Project FPS determines edit
-boundaries; export FPS is a separate choice. Source video/audio offsets relative
-to container start are inspected. Positive audio offsets are restored after
-resampling/trimming. Invalid/missing timestamps are delegated to the demuxer only
-when it supplies a finite readable timeline; otherwise import fails explicitly.
+Video decoding retains the frame whose presentation timestamp covers the requested
+source time plus one lookahead frame. Sequential requests reuse the decoder. Random
+requests seek backward to a keyframe and decode forward. A dedicated worker coalesces
+requests, cancels obsolete scrubs and publishes through a single-frame slot. Ordinary
+forward playback can finish its current frame, avoiding cancellation starvation.
+Source changes reopen the decoder. Scaling fits into 960x540 RGBA with letterboxing;
+fades multiply RGB toward black. Video follows the buffered audio clock, interpolated
+between mpv's clock updates. No frame seek launches a process or transcodes a source.
 
-## Playback and mixing
+FFmpeg structs live only in a small C++ translation unit compiled against vendored,
+pinned FFmpeg 9 headers. Rust loads ABI-major-matched libraries, keeps them alive until
+decoder destruction, and transfers only opaque handles, byte arrays and scalar time.
 
-Persistent libmpv handles actual seeking and presentation timestamps. A dedicated
-software-render worker sends the latest frame through a bounded single-frame
-slot; UI work never decodes media. Normal libmpv commands run on another worker,
-avoiding render-thread/command-thread wait cycles. Shutdown joins render work and
-frees the render context before destroying the core/library.
+## Audio and bounded buffering
 
-Video sources first normalize to disposable 960×540 H.264 preview files at the
-project frame rate. FFmpeg samples the actual original PTS with round-up timestamp
-mapping, preserving the frame covering a VFR cut. The caches have exact tick-based
-MP4 timestamps. EDL source offsets then evaluate against that normalized timeline.
-The same sampling rule is used for export, which reads originals. Cache identity
-includes source path, file metadata and project FPS; trims/splits do not invalidate
-a source cache. Preparation runs on a cancellable worker with real progress.
-No FFmpeg process launches on seek. Blank segments use the same dimensions,
-pixel format and project frame cadence as the video caches.
+mpv opens a custom read-only virtual RF64 stream. Its demux/cache thread requests small
+blocks of stereo float PCM. Each block evaluates active clips, seeks persistent source
+decoders as needed, resamples to 48 kHz stereo and mixes the requested range. Original
+source PTS preserve delayed audio and gaps. At most eight clip decoder contexts are
+retained; requests and buffers are bounded. RF64 supports projects exceeding 4 GiB of
+logical PCM without creating a PCM file. Read-ahead is one second with explicit byte
+limits. Device audio callbacks perform no application decoding, file reads or locks.
 
-For preview, changed audio clips render to disposable float PCM caches. Unchanged
-clips reuse those caches. Three stereo 48 kHz EDL lanes are mixed by libavfilter,
-with the same gain/fade/master semantics as offline export. All lane segments,
-including silence, use the same PCM format to avoid graph reinitialization stalls.
-No application realtime audio callback performs decoding, file reads or locks;
-libmpv owns audio-device buffering. Playback can use its fallback clock when there
-is no audio device; export never depends on a device.
+All source audio lives on audio lanes, never implicitly on V1. Preview and export use
+this processing order: source range and PTS offsets, 48 kHz stereo resampling, clip
+gain, linear in/out fades, track gain, timeline placement, summation, optional limiter.
+Gain is 10^(dB/20). Edges have a minimum 3 ms safety ramp capped at half the clip;
+overlapping explicit fades multiply. Native sample evaluation and FFmpeg filter
+compilation are checked against independently decoded preview/export reference audio.
+The master filter is shared: limit 0.98, 5 ms attack, 50 ms release, no makeup gain,
+latency compensation. Metering reads actual post-filter astats metadata.
 
-The UI pauses after edits and debounces background mix preparation by 300 ms.
-Export works from a project snapshot, so further edits do not mutate a running
-render. Async preview results are revision-checked before being installed.
+Loudness matching measures integrated LUFS and true peak over the selected source range.
+It targets -16 LUFS, limits predicted true peak to -1 dBTP and boost to +48 dB.
+Nonfinite/silent material below -70 LUFS is refused. Manual gain ranges -60 to +60 dB.
+Automatic waveform scaling is a labelled display setting, independent of audible gain.
+Waveform indexing is progressive, cancellable and never gates playback.
 
-## Audio semantics
+## Editing and persistence
 
-Source range → resample 48 kHz/stereo float → restore initial source offset → pad
-and trim exact clip duration → clip gain → linear in/out fades → track gain →
-sample-aligned timeline delay → sum without automatic attenuation → optional
-master limiter. Gain uses `10^(dB/20)`. Every audio edge has at least a 3 ms safety
-ramp, capped at half the clip. Explicit fades replace the corresponding ramp.
-Overlapping in/out fades multiply.
+V1 is video only; A1 is the default source-audio lane, A2 voice, A3 music. Inserting an
+A/V source creates two clips sharing a link ID. Move, split, trim, reorder and deletion
+operate on both. Gain, mute and fades are independent. Splitting assigns the right pair
+a new link ID. Unlink/relink and all compound changes are undoable. Link validation
+requires matching source, source range and timeline placement; a locked partner blocks
+a compound edit atomically. Audio-only sources create one clip on the chosen audio lane.
 
-Voice matching measures integrated LUFS and true peak on the selected source
-range. Target −16 LUFS, maximum boost +18 dB, predicted peak ceiling −1 dBTP.
-Silence/nonfinite results and levels below −50 LUFS are refused. This is fixed
-loudness matching, not dynamic compression or arbitrary peak normalization.
+Clicking a clip selects it and sets the playhead. Ordinary edge trims keep the opposite
+edge fixed and clamp against source bounds and neighbours on both linked lanes. They
+never ripple implicitly. A drag previews the exposed source frame, including beyond the
+old trim. Top-corner handles edit fades. Body drags move linked clips; overlaps are
+rejected. Earlier/Later swaps neighbours with linked sound. Delete leaves a gap;
+Shift+Delete explicitly removes the selected interval across unlocked tracks, trimming
+or splitting intersections. Linked locks cannot silently break synchronization.
 
-The optional master limiter uses limit 0.98, attack 5 ms, release 50 ms, no makeup
-gain, latency compensation. It protects sample peaks; lossy AAC reconstruction can
-overshoot slightly. The output meter reads actual post-mix astats metadata.
+Edits pause playback and rebuild only a small immutable preview snapshot after 40 ms.
+Revision checks discard stale jobs. Export uses its own snapshot and originals; further
+editing cannot mutate an active render. Auto encoding probes real device initialization
+(NVENC, QSV, AMF or VideoToolbox), falls back to x264, and can retry on CPU after a GPU
+render failure. ETA is estimated from elapsed time and completed output duration.
+Output is written to a sibling temporary file, decoded/validated and atomically replaced.
 
-## Editing semantics
-
-All mutations validate before committing. Locked lanes protect clip edits and
-positions. Primary clips cannot overlap. Audio overlaps on the same lane are
-rejected atomically. Delete leaves a gap. Ripple-delete removes the selected time
-interval from all unlocked lanes; intersecting clips are trimmed or split, fully
-covered clips are removed, and later clips shift left. Locked lanes stay fixed.
-
-Primary edge trims hold the clip's timeline start and ripple later material whose
-start is at or beyond the old end. Audio spanning that boundary stays anchored.
-Numeric property edits do not ripple. A primary drag into an occupied position
-reorders a gapless video sequence; independent audio remains positioned. An
-unoccupied drop moves the clip without shifting other clips. Reorder buttons swap
-neighbors while retaining the gap between them.
-
-Split retains outer fades, clears the new interior fades, and clamps fades to the
-new duration. This rule is stored as actual clip settings and is undoable.
-
-Cross-platform adapters use eframe, rfd, dynamically loaded libmpv, and child
-process argument arrays. Windows is the only locally executed platform; CI and
-manual platform procedures cover the others without claiming they have run.
+Windows is locally tested. Linux/macOS source and packaging paths are maintained but
+have not been run locally. See BUILDING.md and TESTING.md for runtime requirements.

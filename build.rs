@@ -1,4 +1,11 @@
 fn main() {
+    println!("cargo:rerun-if-changed=native/video.cpp");
+    println!("cargo:rerun-if-changed=native/include");
+    cc::Build::new()
+        .cpp(true)
+        .include("native/include")
+        .file("native/video.cpp")
+        .compile("svbb_video");
     println!("cargo:rerun-if-changed=assets/windows.rc");
     println!("cargo:rerun-if-changed=assets/svbb.ico");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {

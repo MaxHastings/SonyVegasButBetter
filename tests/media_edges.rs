@@ -152,8 +152,10 @@ fn offsets_mono_resampling_odd_dimensions_and_codec_imports() {
     };
     let mut clip = Clip::new(&media, 0, 0);
     clip.duration = HZ * 2;
+    let audio = Clip::new(&media, 1, 0);
     p.media.push(media);
     p.clips.push(clip);
+    p.clips.push(audio);
     let out = dir.path().join("offset.mp4");
     render::export(
         &rt,
@@ -189,6 +191,49 @@ fn offsets_mono_resampling_odd_dimensions_and_codec_imports() {
     assert!(
         peak(16000, 24000) > 0.02,
         "Delayed audio must begin after its original PTS offset"
+    );
+    let capture_path = dir.path().join("offset-preview.wav");
+    let capture = svbb::playback::Player::capture(&rt, &capture_path).unwrap();
+    capture.load(
+        render::prepare_preview(&rt, &p, &AtomicBool::new(false)).unwrap(),
+        0,
+        true,
+    );
+    let started = std::time::Instant::now();
+    while capture.snapshot().position < p.duration()
+        && started.elapsed() < std::time::Duration::from_secs(5)
+    {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(
+        capture.snapshot().error.is_none(),
+        "{:?}",
+        capture.snapshot().error
+    );
+    drop(capture);
+    let output = command(&rt.ffmpeg)
+        .args(["-v", "error", "-i"])
+        .arg(capture_path)
+        .args(["-vn", "-ac", "1", "-ar", "48000", "-f", "f32le", "-"])
+        .output()
+        .unwrap();
+    check(&output, "Decode offset preview").unwrap();
+    let decoded: Vec<_> = output
+        .stdout
+        .chunks_exact(4)
+        .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+        .collect();
+    assert!(
+        decoded.len() > 90000,
+        "Native preview must not truncate mixed-rate source"
+    );
+    assert!(
+        decoded[2000..9000].iter().all(|s| s.abs() < 0.001),
+        "Native audio must preserve initial silence"
+    );
+    assert!(
+        decoded[16000..24000].iter().any(|s| s.abs() > 0.02),
+        "Native audio must retain delayed tone"
     );
     let mp3 = dir.path().join("voice.mp3");
     let o = command(&rt.ffmpeg)
@@ -315,6 +360,13 @@ fn very_short_clips_and_independent_output_fps() {
         .unwrap();
     assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "1");
     assert!(rgb(&rt, &output, 0.)[0] > 180);
+    p.tracks[0].mute = true;
+    let hidden = dir.path().join("hidden.mp4");
+    render::export(&rt, &p, &s, &hidden, &AtomicBool::new(false), |_| {}).unwrap();
+    assert!(
+        rgb(&rt, &hidden, 0.).iter().all(|v| *v < 5),
+        "Video mute must export black as in preview"
+    );
 }
 #[test]
 #[ignore]

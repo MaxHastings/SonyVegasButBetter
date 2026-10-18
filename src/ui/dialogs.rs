@@ -143,6 +143,31 @@ impl Editor {
                                     ui.selectable_value(&mut self.quality, i, *name);
                                 }
                             });
+                        egui::ComboBox::from_label("Video encoder")
+                            .selected_text(self.encoder.label())
+                            .show_ui(ui, |ui| {
+                                for encoder in [
+                                    render::Encoder::Auto,
+                                    render::Encoder::Software,
+                                    render::Encoder::Nvidia,
+                                    render::Encoder::Intel,
+                                    render::Encoder::Amd,
+                                ] {
+                                    ui.selectable_value(
+                                        &mut self.encoder,
+                                        encoder,
+                                        encoder.label(),
+                                    );
+                                }
+                                if cfg!(target_os = "macos") {
+                                    ui.selectable_value(
+                                        &mut self.encoder,
+                                        render::Encoder::Apple,
+                                        render::Encoder::Apple.label(),
+                                    );
+                                }
+                            });
+                        ui.small("Auto tests the GPU encoder and falls back to CPU if needed.");
                         ui.label("Audio: timeline mix · AAC stereo 48 kHz / 192 kbps");
                         ui.label(if self.p.peak_protection {
                             "Peak protection enabled"
@@ -174,6 +199,26 @@ impl Editor {
                     });
                     if let Some(cancel) = &self.render_job {
                         ui.add(egui::ProgressBar::new(self.render_progress).show_percentage());
+                        if let Some(encoder) = self.encoder_used {
+                            ui.label(encoder.label());
+                        }
+                        if self.render_progress >= 0.995 {
+                            ui.label("Finalizing and validating output…");
+                        } else if let Some(start) = self.render_started {
+                            let elapsed = start.elapsed().as_secs_f64();
+                            let progress = f64::from(self.render_progress);
+                            if elapsed > 2. && progress > 0.005 {
+                                let remaining = elapsed * (1. - progress) / progress;
+                                ui.monospace(format!(
+                                    "ETA ~ {} · elapsed {} · {:.1}× realtime",
+                                    format_time(remaining),
+                                    format_time(elapsed),
+                                    seconds(self.render_duration) * progress / elapsed
+                                ));
+                            } else {
+                                ui.label("Estimating remaining time…");
+                            }
+                        }
                         ui.label("Rendering a snapshot of this edit. You can keep editing.");
                         if ui.button("Cancel render").clicked() {
                             cancel.store(true, Ordering::Relaxed);
@@ -199,7 +244,7 @@ impl Editor {
             let mut open = true;
             egui::Window::new("SVBB shortcuts and editing behavior").open(&mut open).default_width(660.).show(ctx,|ui|{
             ui.label("Open → Import → Cut → Arrange → Mix → Render");ui.separator();
-            for line in ["Space: play / pause · Left / Right: one project frame · Home / End: timeline bounds","S: split selected clip · Delete: delete and leave a gap · Shift+Delete: ripple delete","Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y): undo / redo · Ctrl+S: save · Ctrl+Shift+S: save as","Ctrl+I: import · Ctrl+O: open · + / −: zoom · Ctrl+wheel: zoom over timeline","Double-click media: append. Drag media to a lane: insert. Drag timeline edges: trim.","Video drag onto another clip reorders a gapless primary sequence; independent audio stays at its positions.","Ripple delete removes the selected time range on every unlocked lane. Intersecting audio is trimmed/split, never silently left over the removed time. Lock A1/A2 to protect their positions.","Primary edge trims ripple downstream clips whose start is at or beyond the old end. Audio crossing that boundary stays anchored. Numeric property edits do not ripple.","Audio lanes permit gaps and reject overlaps; use the other lane for overlapping sound.","Match loudness measures the selected source range, targets −16 LUFS, caps boost at +18 dB and predicted true peak at −1 dBTP. Manual gain remains editable.","Splits retain the original outer fades and clear the two new internal fades. All audio edges have a 3 ms safety ramp.","The default master limiter caps sample peaks at 0.98; AAC may have small reconstructed overshoots.","Save creates a .bak of the previous saved version. Recovery saves run every 15 seconds while dirty."]{ui.label(line);ui.add_space(4.);}
+            for line in ["Space: play / pause · Left / Right: one project frame · Home / End: timeline bounds","Click clip then S: position and split linked clips · Delete: delete and leave a gap · Shift+Delete: ripple delete","Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y): undo / redo · Ctrl+S: save · Ctrl+Shift+S: save as","Ctrl+I: import · Ctrl+O: open · + / −: zoom · Ctrl+wheel: zoom over timeline","Double-click media: append. Drag media to a lane: insert. Drag timeline edges: trim.","Linked audio/video move together. Unlink in Clip Properties or the context menu to edit separately.","Ripple delete removes the selected time range on every unlocked lane. Intersecting audio is trimmed/split, never silently left over the removed time. Lock audio lanes to protect their positions.","Edge trims keep the opposite edge fixed and stop at source boundaries or neighbouring clips. Top-corner handles adjust fades.","Audio lanes permit gaps and reject overlaps; use the other lane for overlapping sound.","Match loudness measures the selected source range, targets −16 LUFS, caps boost at +48 dB and predicted true peak at −1 dBTP. Manual gain remains editable.","Splits retain the original outer fades and clear the two new internal fades. Video fades go to black; audio fades change volume. All audio edges have a 3 ms safety ramp.","The default master limiter caps sample peaks at 0.98; AAC may have small reconstructed overshoots.","Save creates a .bak of the previous saved version. Recovery saves run every 15 seconds while dirty."]{ui.label(line);ui.add_space(4.);}
         });
             self.help = open;
         }

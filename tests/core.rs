@@ -179,8 +179,8 @@ fn exact_time() {
 fn gain_matching() {
     assert!((amplitude(-6.) - 0.501187).abs() < 1e-6);
     assert_eq!(match_loudness(-30., -10.).unwrap(), 9.);
-    assert_eq!(match_loudness(-45., -30.).unwrap(), 18.);
-    assert!(match_loudness(-60., -40.).is_err());
+    assert_eq!(match_loudness(-45., -30.).unwrap(), 29.);
+    assert_eq!(match_loudness(-60., -40.).unwrap(), 39.);
     assert!(match_loudness(f64::NEG_INFINITY, -99.).is_err());
 }
 #[test]
@@ -219,7 +219,7 @@ fn schema_migration_fixture() {
     let version: i32 = c
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 2);
+    assert_eq!(version, 3);
     let count: i64 = c
         .query_row(
             "SELECT COUNT(*) FROM pragma_table_info('clips') WHERE name IN ('fade_in','fade_out')",
@@ -243,9 +243,16 @@ fn populated_old_project_migrates_without_losing_edits() {
     p.tracks[1].gain_db = -3.;
     persistence::save(&file, &p).unwrap();
     let conn = rusqlite::Connection::open(&file).unwrap();
-    conn.execute_batch("ALTER TABLE clips DROP COLUMN fade_in; ALTER TABLE clips DROP COLUMN fade_out; PRAGMA user_version=1;").unwrap();
+    conn.execute_batch("ALTER TABLE clips DROP COLUMN link; ALTER TABLE clips DROP COLUMN fade_in; ALTER TABLE clips DROP COLUMN fade_out; DELETE FROM tracks WHERE lane=3; PRAGMA user_version=1;").unwrap();
     drop(conn);
-    assert_eq!(persistence::load(&file).unwrap(), p);
+    let migrated = persistence::load(&file).unwrap();
+    assert_eq!(migrated.lane(0).len(), 1);
+    assert_eq!(migrated.lane(1).len(), 1);
+    assert_eq!(migrated.lane(2).len(), 1);
+    assert_eq!(migrated.lane(0)[0].link, migrated.lane(1)[0].link);
+    assert!(migrated.lane(0)[0].link.is_some());
+    assert_eq!(migrated.lane(2)[0].start, HZ * 2);
+    assert_eq!(migrated.tracks[2].gain_db, -3.);
     assert!(file.with_extension("v1.backup").is_file());
 }
 #[test]
@@ -276,4 +283,74 @@ proptest::proptest! {
         for frame in frames {let at=p.fps.frame(frame);let target=p.clips.iter().find(|c|c.start<at&&c.end()>at).map(|c|c.id.clone());if let Some(id)=target{h.apply(&mut p,|p|{edit::split(p,&id,at)?;Ok(())}).unwrap();successes+=1;}}
         p.validate().unwrap();proptest::prop_assert_eq!(p.clips.iter().map(|c|c.duration).sum::<i64>(),HZ*10);for _ in 0..successes{h.undo(&mut p);}proptest::prop_assert_eq!(p,original);
     }
+}
+
+#[test]
+fn linked_edits_trim_bounds_and_unlink_are_reversible() {
+    let mut p = project();
+    p.media[0].duration = HZ * 10;
+    let video = edit::append(&mut p, "media", 0, None).unwrap();
+    assert_eq!((p.lane(0).len(), p.lane(1).len()), (1, 1));
+    let mut history = History::default();
+    history
+        .apply(&mut p, |p| {
+            edit::trim_edge(p, &video, false, HZ * 6)?;
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(p.lane(0)[0].start, 0);
+    assert_eq!(p.lane(1)[0].duration, HZ * 6);
+    history
+        .apply(&mut p, |p| {
+            edit::trim_edge(p, &video, true, HZ * 2)?;
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(p.lane(0)[0].end(), HZ * 6);
+    assert_eq!(p.lane(1)[0].source_in, HZ * 2);
+    history
+        .apply(&mut p, |p| edit::move_clip(p, &video, HZ * 10, 0))
+        .unwrap();
+    assert_eq!(p.lane(1)[0].start, HZ * 10);
+    history
+        .apply(&mut p, |p| {
+            edit::split(p, &video, HZ * 12)?;
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!((p.lane(0).len(), p.lane(1).len()), (2, 2));
+    assert_ne!(p.lane(0)[0].link, p.lane(0)[1].link);
+    let before = p.clone();
+    p.tracks[1].locked = true;
+    let locked = p.clone();
+    assert!(
+        history
+            .apply(&mut p, |p| edit::delete(p, &video, false))
+            .is_err()
+    );
+    assert_eq!(p, locked);
+    p.tracks[1].locked = false;
+    history.apply(&mut p, |p| edit::unlink(p, &video)).unwrap();
+    history
+        .apply(&mut p, |p| edit::move_clip(p, &video, HZ * 20, 0))
+        .unwrap();
+    assert_eq!(p.lane(1)[0].start, HZ * 10);
+    history.undo(&mut p);
+    history.undo(&mut p);
+    assert_eq!(p, before);
+    let dir = tempfile::tempdir().unwrap();
+    p.media[0].path = dir.path().join("recording.mp4");
+    let path = dir.path().join("linked.svbb");
+    persistence::save(&path, &p).unwrap();
+    assert_eq!(persistence::load(&path).unwrap(), p);
+}
+#[test]
+fn extending_right_edge_cannot_move_start_or_push_neighbours() {
+    let mut p = project();
+    let a = add(&mut p, 0, 2, 2);
+    add(&mut p, 0, 7, 2);
+    assert_eq!(edit::trim_edge(&mut p, &a, false, HZ * 20).unwrap(), HZ * 7);
+    assert_eq!(p.lane(0)[0].start, HZ * 2);
+    assert_eq!(p.lane(0)[1].start, HZ * 7);
+    p.validate().unwrap();
 }

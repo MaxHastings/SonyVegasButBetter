@@ -21,6 +21,113 @@ pub struct RenderSettings {
     pub fps: Rational,
     pub quality: usize,
     pub protect: bool,
+    #[serde(default)]
+    pub encoder: Encoder,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Encoder {
+    #[default]
+    Auto,
+    Software,
+    Nvidia,
+    Intel,
+    Amd,
+    Apple,
+}
+impl Encoder {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "Auto · GPU when available",
+            Self::Software => "CPU · H.264 software",
+            Self::Nvidia => "NVIDIA · NVENC",
+            Self::Intel => "Intel · Quick Sync",
+            Self::Amd => "AMD · AMF",
+            Self::Apple => "Apple · VideoToolbox",
+        }
+    }
+    fn args(self, quality: usize) -> Vec<String> {
+        let q = [25, 21, 17][quality.min(2)].to_string();
+        let args = match self {
+            Self::Nvidia => vec![
+                "-c:v",
+                "h264_nvenc",
+                "-preset",
+                "p5",
+                "-tune",
+                "hq",
+                "-rc",
+                "vbr",
+                "-cq",
+                &q,
+                "-b:v",
+                "0",
+            ],
+            Self::Intel => vec![
+                "-c:v",
+                "h264_qsv",
+                "-preset",
+                "medium",
+                "-global_quality",
+                &q,
+                "-look_ahead",
+                "0",
+            ],
+            Self::Amd => vec![
+                "-c:v", "h264_amf", "-quality", "quality", "-rc", "cqp", "-qp_i", &q, "-qp_p", &q,
+                "-qp_b", &q,
+            ],
+            Self::Apple => vec![
+                "-c:v",
+                "h264_videotoolbox",
+                "-allow_sw",
+                "0",
+                "-b:v",
+                ["6M", "12M", "24M"][quality.min(2)],
+            ],
+            _ => vec![
+                "-c:v", "libx264", "-threads", "4", "-preset", "fast", "-crf", &q,
+            ],
+        };
+        args.into_iter().map(str::to_owned).collect()
+    }
+}
+/// A listed encoder may still fail because a device or compatible driver is absent.
+/// Exercise the actual encoder before touching the user's destination.
+pub fn select_encoder(rt: &Runtime, requested: Encoder, cancel: &AtomicBool) -> Result<Encoder> {
+    if requested == Encoder::Software {
+        return Ok(requested);
+    }
+    let candidates = if requested == Encoder::Auto {
+        if cfg!(target_os = "macos") {
+            vec![Encoder::Apple]
+        } else {
+            vec![Encoder::Nvidia, Encoder::Intel, Encoder::Amd]
+        }
+    } else {
+        vec![requested]
+    };
+    for encoder in candidates {
+        let mut args: Vec<String> = ["-f", "lavfi", "-i", "color=black:s=1280x720:r=30:d=0.1"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        args.extend(encoder.args(1));
+        args.extend(
+            ["-pix_fmt", "yuv420p", "-an", "-f", "null", "-"]
+                .into_iter()
+                .map(str::to_owned),
+        );
+        if run_progress(rt, &args, HZ / 10, cancel, |_| {}).is_ok() {
+            return Ok(encoder);
+        }
+        ensure!(!cancel.load(Ordering::Relaxed), "Cancelled");
+    }
+    ensure!(
+        requested == Encoder::Auto,
+        "{} is unavailable. Update the GPU driver or choose Auto / CPU.",
+        requested.label()
+    );
+    Ok(Encoder::Software)
 }
 impl RenderSettings {
     pub fn project(p: &Project) -> Self {
@@ -30,6 +137,7 @@ impl RenderSettings {
             fps: p.fps,
             quality: 1,
             protect: p.peak_protection,
+            encoder: Encoder::Auto,
         }
     }
 }
@@ -138,7 +246,7 @@ pub fn plan(p: &Project, s: &RenderSettings) -> Result<Plan> {
         inputs.push(video_input);
         let name = format!("v{}", vids.len());
         graph += &format!(
-            "[{n}:{}]{}[{name}];",
+            "[{n}:{}]{}{}{}[{name}];",
             m.video.as_ref().unwrap().index,
             video_filter(
                 s.width,
@@ -146,7 +254,13 @@ pub fn plan(p: &Project, s: &RenderSettings) -> Result<Plan> {
                 p.fps,
                 c.duration,
                 (m.video.as_ref().unwrap().start - c.source_in).max(0)
-            )
+            ),
+            video_fades(c, 0),
+            if c.mute || p.tracks[0].mute {
+                ",drawbox=color=black:t=fill"
+            } else {
+                ""
+            }
         );
         vids.push(name);
         cursor = c.end();
@@ -172,7 +286,7 @@ pub fn plan(p: &Project, s: &RenderSettings) -> Result<Plan> {
         s.fps.den,
         decimal(p.duration())
     );
-    for lane in 0..3 {
+    for lane in 1..LANES {
         for c in p.lane(lane) {
             let m = p.media(&c.media)?;
             let Some(a) = &m.audio else {
@@ -294,9 +408,22 @@ pub fn export(
     s: &RenderSettings,
     dest: &Path,
     cancel: &AtomicBool,
+    progress: impl FnMut(f32),
+) -> Result<()> {
+    export_report(rt, p, s, dest, cancel, progress, |_| {})
+}
+pub fn export_report(
+    rt: &Runtime,
+    p: &Project,
+    s: &RenderSettings,
+    dest: &Path,
+    cancel: &AtomicBool,
     mut progress: impl FnMut(f32),
+    mut encoding: impl FnMut(Encoder),
 ) -> Result<()> {
     let plan = plan(p, s)?;
+    let encoder = select_encoder(rt, s.encoder, cancel)?;
+    encoding(encoder);
     ensure!(
         !p.media
             .iter()
@@ -320,14 +447,9 @@ pub fn export(
             "[vout]".into(),
             "-map".into(),
             "[aout]".into(),
-            "-c:v".into(),
-            "libx264".into(),
-            "-threads".into(),
-            "4".into(),
-            "-preset".into(),
-            "fast".into(),
-            "-crf".into(),
-            ["25", "21", "17"][s.quality.min(2)].into(),
+        ]);
+        args.extend(encoder.args(s.quality));
+        args.extend([
             "-pix_fmt".into(),
             "yuv420p".into(),
             "-c:a".into(),
@@ -344,7 +466,19 @@ pub fn export(
             "+faststart".into(),
             part.to_string_lossy().into(),
         ]);
-        let r = run_progress(rt, &args, p.duration(), cancel, &mut progress);
+        let mut r = run_progress(rt, &args, p.duration(), cancel, &mut progress);
+        if r.is_err()
+            && s.encoder == Encoder::Auto
+            && encoder != Encoder::Software
+            && !cancel.load(Ordering::Relaxed)
+        {
+            let start = args.iter().position(|s| s == "-c:v").unwrap();
+            let end = args[start..].iter().position(|s| s == "-pix_fmt").unwrap() + start;
+            args.splice(start..end, Encoder::Software.args(s.quality));
+            encoding(Encoder::Software);
+            progress(0.);
+            r = run_progress(rt, &args, p.duration(), cancel, &mut progress);
+        }
         let _ = fs::remove_file(graph);
         r?;
         ensure!(!cancel.load(Ordering::Relaxed), "Cancelled");
@@ -461,221 +595,45 @@ pub fn audio_cache(rt: &Runtime, m: &Media, c: &Clip, cancel: &AtomicBool) -> Re
     result?;
     Ok(path)
 }
-/// Source-level project-frame cache preserves the frame covering VFR cuts.
-/// Later splits, trims, reorders and seeks reuse this file unchanged.
-pub fn video_cache(
-    rt: &Runtime,
-    m: &Media,
-    fps: Rational,
-    cancel: &AtomicBool,
-    mut progress: impl FnMut(f32),
-) -> Result<PathBuf> {
-    let stamp = fs::metadata(&m.path)?
-        .modified()?
-        .duration_since(std::time::UNIX_EPOCH)?
-        .as_nanos();
-    let filter = video_filter(
-        960,
-        540,
-        fps,
-        m.duration,
-        m.video.as_ref().context("No video stream")?.start.max(0),
-    );
-    let key = format!(
-        "preview-video-v1|{}|{}|{}|{}",
-        m.path.display(),
-        m.file_size,
-        stamp,
-        filter
-    );
-    let hash = format!("{:x}", Sha256::digest(key));
-    let path = rt.cache.join(format!("video-{hash}.mp4"));
-    if path.is_file() {
-        return Ok(path);
-    }
-    let part = rt.cache.join(format!("video-{}.part.mp4", id()));
-    let args = vec![
-        "-threads".into(),
-        "4".into(),
-        "-i".into(),
-        m.path.to_string_lossy().into(),
-        "-map".into(),
-        format!("0:{}", m.video.as_ref().unwrap().index),
-        "-an".into(),
-        "-vf".into(),
-        filter,
-        "-c:v".into(),
-        "libx264".into(),
-        "-threads".into(),
-        "4".into(),
-        "-preset".into(),
-        "ultrafast".into(),
-        "-crf".into(),
-        "18".into(),
-        "-bf".into(),
-        "0".into(),
-        "-g".into(),
-        (fps.num / fps.den).max(1).to_string(),
-        "-video_track_timescale".into(),
-        HZ.to_string(),
-        "-movflags".into(),
-        "+faststart".into(),
-        part.to_string_lossy().into(),
-    ];
-    let result = run_progress(rt, &args, m.duration, cancel, &mut progress);
-    if result.is_ok() {
-        fs::rename(&part, &path)?;
-    } else {
-        let _ = fs::remove_file(&part);
-    }
-    result?;
-    Ok(path)
-}
 #[derive(Clone, Debug)]
 pub struct PreviewPlan {
-    pub combined: PathBuf,
-    pub graph: String,
-}
-fn edl_file(path: &Path) -> String {
-    let s = path.to_string_lossy().replace('\\', "/");
-    format!("%{}%{}", s.len(), s)
-}
-fn entry(path: &Path, start: Tick, duration: Tick) -> String {
-    format!(
-        "{},{},{}\n",
-        edl_file(path),
-        decimal(start),
-        decimal(duration)
-    )
-}
-fn gap_entries(path: &Path, mut duration: Tick, limit: Tick) -> String {
-    let mut s = String::new();
-    while duration > 0 {
-        let d = duration.min(limit);
-        s += &entry(path, 0, d);
-        duration -= d;
-    }
-    s
+    pub project: Project,
 }
 pub fn prepare_preview(rt: &Runtime, p: &Project, cancel: &AtomicBool) -> Result<PreviewPlan> {
     prepare_preview_progress(rt, p, cancel, |_, _| {})
 }
 pub fn prepare_preview_progress(
-    rt: &Runtime,
+    _rt: &Runtime,
     p: &Project,
     cancel: &AtomicBool,
     mut progress: impl FnMut(&str, f32),
 ) -> Result<PreviewPlan> {
     p.validate()?;
+    ensure!(!cancel.load(Ordering::Relaxed), "Cancelled");
     ensure!(p.duration() > 0, "Timeline is empty");
     ensure!(
         p.missing().is_empty(),
         "Relink missing media before previewing"
     );
-    let silence = rt.cache.join("silence-f32-1h.wav");
-    let black = rt
-        .cache
-        .join(format!("black-frames-{}-{}-10s.mp4", p.fps.num, p.fps.den));
-    if !silence.exists() {
-        use std::io::{Seek, SeekFrom, Write};
-        let mut f = fs::File::create(&silence)?;
-        let bytes = 48000u32 * 8 * 3600;
-        f.write_all(b"RIFF")?;
-        f.write_all(&(bytes + 36).to_le_bytes())?;
-        f.write_all(b"WAVEfmt ")?;
-        f.write_all(&16u32.to_le_bytes())?;
-        f.write_all(&3u16.to_le_bytes())?;
-        f.write_all(&2u16.to_le_bytes())?;
-        f.write_all(&48000u32.to_le_bytes())?;
-        f.write_all(&384000u32.to_le_bytes())?;
-        f.write_all(&8u16.to_le_bytes())?;
-        f.write_all(&32u16.to_le_bytes())?;
-        f.write_all(b"data")?;
-        f.write_all(&bytes.to_le_bytes())?;
-        f.seek(SeekFrom::Start(44 + bytes as u64 - 1))?;
-        f.write_all(&[0])?;
-    }
-    if !black.exists() {
-        let out = command(&rt.ffmpeg)
-            .args([
-                "-v",
-                "error",
-                "-nostdin",
-                "-y",
-                "-f",
-                "lavfi",
-                "-i",
-                &format!("color=black:s=960x540:r={}/{}:d=10", p.fps.num, p.fps.den),
-                "-c:v",
-                "libx264",
-                "-preset",
-                "ultrafast",
-                "-bf",
-                "0",
-                "-g",
-                "60",
-                "-video_track_timescale",
-                "282240000",
-            ])
-            .arg(&black)
-            .output()?;
-        check(&out, "Prepare black frames")?;
-    }
-    let mut video = String::from("# mpv EDL v0\n!delay_open,media_type=video\n!no_chapters\n");
-    let mut cursor = 0;
-    for c in p.lane(0) {
-        if c.start > cursor {
-            video += &gap_entries(&black, c.start - cursor, HZ * 10);
+    progress("Source playback", 1.);
+    Ok(PreviewPlan { project: p.clone() })
+}
+
+fn video_fades(c: &Clip, offset: Tick) -> String {
+    let mut filters = String::new();
+    for (kind, start, duration) in [
+        ("in", offset, c.fade_in),
+        ("out", offset + c.duration - c.fade_out, c.fade_out),
+    ] {
+        if duration > 0 {
+            filters += &format!(
+                ",fade=t={kind}:st={}:d={}:enable='between(t,{},{})'",
+                decimal(start),
+                decimal(duration),
+                decimal(start),
+                decimal(start + duration)
+            );
         }
-        let media = p.media(&c.media)?;
-        let cache = video_cache(rt, media, p.fps, cancel, |n| progress(&media.name, n))?;
-        video += &entry(&cache, c.source_in, c.duration);
-        cursor = c.end();
     }
-    if cursor < p.duration() {
-        video += &gap_entries(&black, p.duration() - cursor, HZ * 10);
-    }
-    let mut combined = video;
-    let mut graph = String::from("[vid1]null[vo];");
-    let mut names = String::new();
-    for lane in 0..3 {
-        combined += "!new_stream\n!delay_open,media_type=audio\n!no_chapters\n";
-        cursor = 0;
-        for c in p.lane(lane) {
-            if c.start > cursor {
-                combined += &gap_entries(&silence, c.start - cursor, HZ * 3600);
-            }
-            let m = p.media(&c.media)?;
-            if m.audio.is_some() && !c.mute && !p.tracks[lane].mute {
-                let audio = audio_cache(rt, m, c, cancel)?;
-                combined += &entry(&audio, 0, c.duration);
-            } else {
-                combined += &gap_entries(&silence, c.duration, HZ * 3600);
-            }
-            cursor = c.end();
-        }
-        if cursor < p.duration() {
-            combined += &gap_entries(&silence, p.duration() - cursor, HZ * 3600);
-        }
-        graph += &format!(
-            "[aid{}]aresample=48000,aformat=sample_fmts=flt:channel_layouts=stereo,volume={:.12}[a{lane}];",
-            lane + 1,
-            if p.tracks[lane].mute {
-                0.
-            } else {
-                amplitude(p.tracks[lane].gain_db)
-            }
-        );
-        names += &format!("[a{lane}]");
-    }
-    graph += &format!(
-        "{names}amix=inputs=3:normalize=0:duration=longest,{}[ao]",
-        master(p.peak_protection)
-    );
-    let combined_path = rt.cache.join(format!("preview-{}.edl", id()));
-    fs::write(&combined_path, combined)?;
-    Ok(PreviewPlan {
-        combined: combined_path,
-        graph,
-    })
+    filters
 }

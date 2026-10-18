@@ -198,7 +198,8 @@ impl Runtime {
         };
         // Actually decode the first frame/block; codec names alone aren't support claims.
         let mut test = command(&self.ffmpeg);
-        test.args(["-v", "error", "-nostdin", "-i"]).arg(&m.path);
+        test.args(["-v", "error", "-nostdin", "-threads", "1", "-i"])
+            .arg(&m.path);
         if let Some(s) = &m.video {
             test.args(["-map", &format!("0:{}", s.index), "-frames:v", "1"]);
         } else {
@@ -209,10 +210,18 @@ impl Runtime {
         Ok(m)
     }
     pub fn waveform(&self, m: &Media) -> Result<Vec<f32>> {
+        self.waveform_progress(m, &std::sync::atomic::AtomicBool::new(false), |_, _| {})
+    }
+    pub fn waveform_progress(
+        &self,
+        m: &Media,
+        cancel: &std::sync::atomic::AtomicBool,
+        mut progress: impl FnMut(usize, Vec<f32>),
+    ) -> Result<Vec<f32>> {
         if m.audio.is_none() {
             return Ok(vec![]);
         }
-        let cache = self.asset_cache(m, "wave-v1")?;
+        let cache = self.asset_cache(m, "wave-v2")?;
         if let Ok(bytes) = fs::read(&cache)
             && bytes.len().is_multiple_of(4)
         {
@@ -222,7 +231,7 @@ impl Runtime {
                 .collect());
         }
         let mut child = command(&self.ffmpeg)
-            .args(["-v", "error", "-nostdin", "-i"])
+            .args(["-v", "error", "-nostdin", "-threads", "1", "-i"])
             .arg(&m.path)
             .args([
                 "-map",
@@ -246,9 +255,18 @@ impl Runtime {
             s
         });
         let mut reader = std::io::BufReader::new(child.stdout.take().unwrap());
-        let mut peaks = vec![];
+        let delay = m.audio.as_ref().map(|s| s.start).unwrap_or(0).max(0);
+        let mut peaks = vec![0.; (seconds(delay) * 100.).round() as usize];
+        let mut reported = 0;
+        let mut last_report = std::time::Instant::now();
         let mut block = [0u8; 320];
         loop {
+            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = log.join();
+                anyhow::bail!("Cancelled");
+            }
             let mut filled = 0;
             while filled < block.len() {
                 let n = reader.read(&mut block[filled..])?;
@@ -265,6 +283,11 @@ impl Runtime {
                 .map(|b| f32::from_le_bytes(b.try_into().unwrap()).abs())
                 .fold(0., f32::max);
             peaks.push(peak);
+            if last_report.elapsed() > std::time::Duration::from_millis(250) {
+                progress(reported, peaks[reported..].to_vec());
+                reported = peaks.len();
+                last_report = std::time::Instant::now();
+            }
         }
         let status = child.wait()?;
         let log = log.join().unwrap_or_default();

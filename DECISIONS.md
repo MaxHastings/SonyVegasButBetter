@@ -8,26 +8,34 @@ implementation in Rust, with a replaceable shell and a framework-independent cor
 Its immediate-mode controls and native file dialogs meet the compact workstation
 layout. This trades native OS menus for consistent in-window menus.
 
-## Media adapter
-Use pinned libmpv (FFmpeg libraries internally) for persistent decoding, accurate
-timestamp seeking, audio output and synchronized presentation. The C ABI is isolated
-in playback.rs. Offline jobs use FFmpeg and ffprobe processes with argument arrays.
-Preview compiles disposable EDLs; EDL is never authoritative project storage.
+## Media adapter (revised after long-recording playtest)
+The previous full-source video normalization and per-clip PCM preparation made long
+recordings unusable until processing finished. Neither is on the interactive path now.
+Persistent native FFmpeg video decoding retains the frame covering a VFR cut. Persistent
+FFmpeg audio decoding feeds an on-demand virtual float stream to libmpv for buffering
+and device output. This avoids EDL boundary frame loss and graph reinitialization when
+sources change sample format, rate or channel count. No process launches per seek.
 
-Audio clips are cached as stereo float PCM using the same resample/gain/fade filters
-as export. Only changed clips need rebuilding. Three audio EDL lanes are mixed by
-libavfilter in mpv using the same track gain, summation and peak protection as export.
-Playback waits for changed caches to prepare; the UI remains usable.
-This avoids disk or decode work in an application audio callback. Cache latency is a
-known tradeoff to measure with the acceptance workload.
+A small C++ shim owns FFmpeg structures; Rust owns project semantics, scheduling,
+source requests and sample gain/fade evaluation. Vendored FFmpeg 9 headers and checked
+ABI-major dynamic libraries make this boundary reviewable. Audio decodes on the demux
+worker, not the device callback. Decoder contexts, decoded frames and read-ahead are
+bounded independently of source duration.
 
-The VFR covering-frame regression showed that libmpv's EDL demuxer discards a
-frame beginning before a cut even if it covers the cut. Decoder options and a
-post-EDL filter cannot restore that discarded frame. Therefore each video source
-is normalized once to a project-frame-aligned 960×540 playback cache, using the
-same timestamp sampling rule as export. All subsequent edits reuse it. This
-costs initial preparation time and disk space, but avoids a process per seek and
-keeps edit semantics correct. Export always reads full-resolution originals.
+## Direct manipulation and separate A/V
+Audio and video are explicit separate clips. Link IDs provide synchronized positional
+edits, while gain/fades remain independent. Legacy implicit audio is materialized by
+schema migration. Normal trims follow the pointer and keep the opposite edge fixed;
+ripple deletion is explicit. Overlapping body drops are rejected; reorder buttons
+remain available. This removes the previous surprise ripple/reorder behavior.
+
+## Hardware export
+Auto performs a short real encoder probe. Listing an FFmpeg encoder alone does not
+prove that a GPU/driver can initialize it. Compatible hardware encoding is preferred;
+software remains selectable and provides an automatic fallback. CPU decoding/filtering
+remain in the current offline graph, so GPU encoding is not a claim of an entirely
+GPU-resident pipeline. Quality settings use each encoder's supported quality controls;
+identical quality labels do not promise equal bitstreams or file sizes.
 
 ## Timing and persistence
 Integer ticks at 282,240,000 Hz represent ordinary broadcast frame rates and 44.1/48

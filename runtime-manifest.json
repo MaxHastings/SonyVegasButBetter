@@ -1,14 +1,57 @@
 {
   "archives": [
-    {"file":"essentials.zip","url":"https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip","sha256":"60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba"},
-    {"file":"mpv.7z","url":"https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260903/mpv-dev-x86_64-20260903-git-69e63f425a.7z","sha256":"fac135c68a35b7639e39d72c0c365104edbaebdea39a0dfdd8c36e8c8e80faef"}
+    {
+      "file": "essentials.zip",
+      "url": "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip",
+      "sha256": "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba"
+    },
+    {
+      "file": "mpv.7z",
+      "url": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260903/mpv-dev-x86_64-20260903-git-69e63f425a.7z",
+      "sha256": "fac135c68a35b7639e39d72c0c365104edbaebdea39a0dfdd8c36e8c8e80faef"
+    },
+    {
+      "file": "ffmpeg-shared.zip",
+      "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-18-13-01/ffmpeg-n9.0.2-28-g669f5ab083-win64-gpl-shared-9.0.zip",
+      "sha256": "d2b678d40216367c3944644b90ff498bbee6a3e5f9c17a83a9d6eaaacf6673de"
+    }
   ],
   "binaries": [
-    {"path":"ffmpeg.exe","sha256":"3256173f3f8bffd7df12227c68adf68025edb1832273a9530688a7bb1ed8edec"},
-    {"path":"ffprobe.exe","sha256":"f0d36ecbbdd3bcfac3efa078c96c7271c2e68b3810595552ac3b7f17e9a65c52"},
-    {"path":"mpv/libmpv-2.dll","sha256":"673e6397920ab64a9c5b3a618f7f16d38854efe72b58665f1f84e4e873b763a4"}
+    {
+      "path": "ffmpeg.exe",
+      "sha256": "3256173f3f8bffd7df12227c68adf68025edb1832273a9530688a7bb1ed8edec"
+    },
+    {
+      "path": "ffprobe.exe",
+      "sha256": "f0d36ecbbdd3bcfac3efa078c96c7271c2e68b3810595552ac3b7f17e9a65c52"
+    },
+    {
+      "path": "mpv/libmpv-2.dll",
+      "sha256": "673e6397920ab64a9c5b3a618f7f16d38854efe72b58665f1f84e4e873b763a4"
+    },
+    {
+      "path": "av/avcodec-63.dll",
+      "sha256": "e9ccf274f6cb37f2473233b1019bdb951033b4194a8d1f38fbc3fb3410e273f8"
+    },
+    {
+      "path": "av/avformat-63.dll",
+      "sha256": "2ffe1edce0702e6ce5d69a7ee9a322f98b0301b77a2880e4541270c9502b9465"
+    },
+    {
+      "path": "av/avutil-61.dll",
+      "sha256": "df5cd4f45e20847e3d8c37c4e2850a8dd4412e0847bf4ed96a4c5527ed818168"
+    },
+    {
+      "path": "av/swresample-7.dll",
+      "sha256": "78f2cd5ff85e7083f1bc122acd83b3f36d3717ce72a7c9720df292bad6ad7604"
+    },
+    {
+      "path": "av/swscale-10.dll",
+      "sha256": "ea897d1dd6fe50cea57e4b0393be91c4c3267329dc5bcf277b161f1c847e847f"
+    }
   ],
-  "ffmpeg_source":"https://github.com/FFmpeg/FFmpeg/commit/946fcce07b",
-  "mpv_source":"https://github.com/mpv-player/mpv/commit/69e63f425a",
-  "mpv_build_source":"https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20260903"
+  "ffmpeg_source": "https://github.com/FFmpeg/FFmpeg/commit/946fcce07b",
+  "mpv_source": "https://github.com/mpv-player/mpv/commit/69e63f425a",
+  "mpv_build_source": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20260903",
+  "preview_ffmpeg_build_source": "https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-10-18-13-01"
 }

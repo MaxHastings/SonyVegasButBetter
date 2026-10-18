@@ -1,10 +1,15 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$packageRoot = Join-Path $projectRoot 'artifacts\SVBB-0.1.0-windows-x64'
+$packageRoot = Join-Path $projectRoot 'artifacts\SVBB-0.1.1-windows-x64'
 New-Item -ItemType Directory -Force $packageRoot,(Join-Path $packageRoot 'runtime'),(Join-Path $packageRoot 'licenses'),(Join-Path $packageRoot 'source') | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot 'target\release\svbb.exe') -Destination (Join-Path $packageRoot 'SonyVegasButBetter.exe')
 foreach ($file in @('ffmpeg.exe','ffprobe.exe')) { Copy-Item -LiteralPath (Join-Path $projectRoot "runtime\$file") -Destination (Join-Path $packageRoot 'runtime') }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'runtime\mpv\libmpv-2.dll') -Destination (Join-Path $packageRoot 'runtime')
+$avDir = Join-Path $packageRoot 'runtime\av'
+New-Item -ItemType Directory -Force $avDir | Out-Null
+foreach ($name in @('avutil-61.dll','swresample-7.dll','avcodec-63.dll','avformat-63.dll','swscale-10.dll')) {
+    Copy-Item -LiteralPath (Join-Path $projectRoot "runtime\av\$name") -Destination $avDir
+}
 Get-ChildItem -LiteralPath $projectRoot -File | Where-Object { $_.Extension -eq '.md' -or $_.Name -in @('LICENSE','runtime-manifest.json') } | Copy-Item -Destination $packageRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot 'runtime\essentials\ffmpeg-9.0.2-essentials_build\LICENSE') -Destination (Join-Path $packageRoot 'licenses\FFmpeg-GPLv3.txt')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'runtime\essentials\ffmpeg-9.0.2-essentials_build\README.txt') -Destination (Join-Path $packageRoot 'licenses\FFmpeg-build.txt')
@@ -16,7 +21,7 @@ Get-ChildItem -LiteralPath $packageRoot -Recurse -File | Where-Object { $_.Name 
     $relativePath = $_.FullName.Substring($packageRoot.Length + 1)
     '{0}  {1}' -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(),$relativePath
 } | Set-Content -LiteralPath (Join-Path $packageRoot 'SHA256SUMS.txt')
-$archive = Join-Path $projectRoot 'artifacts\SVBB-0.1.0-windows-x64.zip'
+$archive = Join-Path $projectRoot 'artifacts\SVBB-0.1.1-windows-x64.zip'
 & 'C:\Program Files\7-Zip\7z.exe' a -tzip -mx=7 $archive "$packageRoot\*" | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Packaging archive failed' }
 Write-Output $packageRoot

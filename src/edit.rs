@@ -52,9 +52,44 @@ fn index(p: &Project, id: &str) -> Result<usize> {
     ensure!(!p.tracks[p.clips[i].lane].locked, "Track is locked");
     Ok(i)
 }
+fn members(p: &Project, clip: &str) -> Result<Vec<usize>> {
+    let i = index(p, clip)?;
+    let group = p.clips[i].link.as_ref();
+    let ids: Vec<_> = p
+        .clips
+        .iter()
+        .enumerate()
+        .filter(|(j, c)| *j == i || group.is_some() && c.link.as_ref() == group)
+        .map(|(j, _)| j)
+        .collect();
+    ensure!(
+        ids.iter().all(|j| !p.tracks[p.clips[*j].lane].locked),
+        "A linked track is locked; unlock it or unlink the clips"
+    );
+    Ok(ids)
+}
+pub fn unlink(p: &mut Project, clip: &str) -> Result<()> {
+    for i in members(p, clip)? {
+        p.clips[i].link = None;
+    }
+    Ok(())
+}
+pub fn link(p: &mut Project, clip: &str) -> Result<()> {
+    let i = index(p, clip)?;
+    let c = &p.clips[i];
+    ensure!(c.link.is_none(), "Clip is already linked");
+    let j = p.clips.iter().position(|x| x.id != c.id && x.link.is_none() && (x.lane == 0) != (c.lane == 0)
+        && x.media == c.media && x.start == c.start && x.source_in == c.source_in && x.duration == c.duration)
+        .ok_or_else(|| anyhow::anyhow!("Align an audio and video clip from the same source, with matching source in and duration, before linking"))?;
+    ensure!(!p.tracks[p.clips[j].lane].locked, "Partner track is locked");
+    let group = id();
+    p.clips[i].link = Some(group.clone());
+    p.clips[j].link = Some(group);
+    Ok(())
+}
 pub fn append(p: &mut Project, media: &str, lane: usize, at: Option<Tick>) -> Result<String> {
     ensure!(
-        lane < 3 && !p.tracks[lane].locked,
+        lane < LANES && !p.tracks[lane].locked,
         "Track is locked or invalid"
     );
     let start = at.unwrap_or_else(|| p.lane(lane).last().map(|c| c.end()).unwrap_or(0));
@@ -74,6 +109,15 @@ pub fn append(p: &mut Project, media: &str, lane: usize, at: Option<Tick>) -> Re
         shift_after(p, start, c.duration);
     }
     let id = c.id.clone();
+    if lane == 0 && p.media(media)?.audio.is_some() {
+        ensure!(!p.tracks[1].locked, "Source audio track is locked");
+        let group = crate::model::id();
+        c.link = Some(group);
+        let mut audio = c.clone();
+        audio.id = crate::model::id();
+        audio.lane = 1;
+        p.clips.push(audio);
+    }
     p.clips.push(c);
     Ok(id)
 }
@@ -85,26 +129,36 @@ fn shift_after(p: &mut Project, at: Tick, delta: Tick) {
     }
 }
 pub fn split(p: &mut Project, clip: &str, at: Tick) -> Result<String> {
-    let i = index(p, clip)?;
+    let ids = members(p, clip)?;
     let at = p.fps.align(at);
-    let c = &mut p.clips[i];
-    ensure!(
-        at > c.start && at < c.end(),
-        "Place the playhead inside the selected clip"
-    );
-    let mut right = c.clone();
-    right.id = id();
-    right.source_in += at - c.start;
-    right.duration = c.end() - at;
-    right.start = at;
-    c.duration = at - c.start;
-    c.fade_out = 0;
-    right.fade_in = 0;
-    c.clamp_fades();
-    right.clamp_fades();
-    let id = right.id.clone();
-    p.clips.push(right);
-    Ok(id)
+    let group = ids
+        .first()
+        .and_then(|i| p.clips[*i].link.as_ref())
+        .map(|_| id());
+    let mut selected_right = String::new();
+    for i in ids {
+        let c = &mut p.clips[i];
+        ensure!(
+            at > c.start && at < c.end(),
+            "Place the playhead inside the selected clip"
+        );
+        let mut right = c.clone();
+        right.id = id();
+        right.link = group.clone();
+        right.source_in += at - c.start;
+        right.duration = c.end() - at;
+        right.start = at;
+        c.duration = at - c.start;
+        c.fade_out = 0;
+        right.fade_in = 0;
+        c.clamp_fades();
+        right.clamp_fades();
+        if c.id == clip {
+            selected_right = right.id.clone();
+        }
+        p.clips.push(right);
+    }
+    Ok(selected_right)
 }
 pub fn trim(
     p: &mut Project,
@@ -113,6 +167,7 @@ pub fn trim(
     duration: Tick,
     ripple: bool,
 ) -> Result<()> {
+    let ids = members(p, clip)?;
     let i = index(p, clip)?;
     let old_end = p.clips[i].end();
     let old_duration = p.clips[i].duration;
@@ -123,22 +178,70 @@ pub fn trim(
     if ripple && p.clips[i].lane == 0 {
         shift_after(p, old_end, duration - old_duration);
     }
-    p.clips[i].source_in = source_in;
-    p.clips[i].duration = duration;
-    p.clips[i].clamp_fades();
+    for i in ids {
+        p.clips[i].source_in = source_in;
+        p.clips[i].duration = duration;
+        p.clips[i].clamp_fades();
+    }
     Ok(())
 }
+/// Clamp an ordinary edge trim to source and neighbouring clips on every linked lane.
+/// The opposite edge is fixed. There is deliberately no implicit ripple.
+pub fn trim_edge(p: &mut Project, clip: &str, left: bool, requested: Tick) -> Result<Tick> {
+    let ids = members(p, clip)?;
+    let c = p.clips[index(p, clip)?].clone();
+    let frame = p.fps.frame(1);
+    let (mut low, mut high) = if left {
+        ((c.start - c.source_in).max(0), c.end() - frame)
+    } else {
+        (
+            c.start + frame,
+            c.start + p.media(&c.media)?.duration - c.source_in,
+        )
+    };
+    for i in &ids {
+        for other in p
+            .lane(p.clips[*i].lane)
+            .into_iter()
+            .filter(|x| !ids.iter().any(|j| p.clips[*j].id == x.id))
+        {
+            if left && other.end() <= c.start {
+                low = low.max(other.end());
+            }
+            if !left && other.start >= c.end() {
+                high = high.min(other.start);
+            }
+        }
+    }
+    let edge = p.fps.align(requested).clamp(low, high);
+    for i in ids {
+        let x = &mut p.clips[i];
+        if left {
+            x.start = edge;
+            x.source_in = c.source_in + edge - c.start;
+            x.duration = c.end() - edge;
+        } else {
+            x.duration = edge - c.start;
+        }
+        x.clamp_fades();
+    }
+    Ok(edge)
+}
 pub fn move_clip(p: &mut Project, clip: &str, at: Tick, lane: usize) -> Result<()> {
+    let ids = members(p, clip)?;
     let i = index(p, clip)?;
     ensure!(
-        lane < 3 && !p.tracks[lane].locked,
+        lane < LANES && !p.tracks[lane].locked,
         "Destination track is locked"
     );
     ensure!(
         (p.clips[i].lane == 0) == (lane == 0),
         "Video and audio lanes cannot be interchanged"
     );
-    p.clips[i].start = p.fps.align(at).max(0);
+    let delta = p.fps.align(at).max(0) - p.clips[i].start;
+    for j in ids {
+        p.clips[j].start += delta;
+    }
     p.clips[i].lane = lane;
     Ok(())
 }
@@ -157,6 +260,10 @@ pub fn reorder(p: &mut Project, clip: &str, direction: i32) -> Result<()> {
         .iter()
         .position(|c| c.id == order[dest as usize])
         .unwrap();
+    let partner = p.clips[j].id.clone();
+    let ids = members(p, clip)?;
+    let others = members(p, &partner)?;
+    let (old_i, old_j) = (p.clips[i].start, p.clips[j].start);
     if direction < 0 {
         let start = p.clips[j].start;
         let gap = p.clips[i].start - p.clips[j].end();
@@ -168,11 +275,30 @@ pub fn reorder(p: &mut Project, clip: &str, direction: i32) -> Result<()> {
         p.clips[i].start = start + p.clips[j].duration + gap;
         p.clips[j].start = start;
     }
+    let (di, dj) = (p.clips[i].start - old_i, p.clips[j].start - old_j);
+    for k in ids {
+        if k != i {
+            p.clips[k].start += di;
+        }
+    }
+    for k in others {
+        if k != j {
+            p.clips[k].start += dj;
+        }
+    }
     Ok(())
 }
 pub fn delete(p: &mut Project, clip: &str, ripple: bool) -> Result<()> {
+    let ids = members(p, clip)?;
     let i = index(p, clip)?;
-    let c = p.clips.remove(i);
+    let c = p.clips[i].clone();
+    p.clips = p
+        .clips
+        .iter()
+        .enumerate()
+        .filter(|(j, _)| !ids.contains(j))
+        .map(|(_, c)| c.clone())
+        .collect();
     if ripple {
         ripple_region(p, c.start, c.end())?;
     }
@@ -183,6 +309,7 @@ pub fn delete(p: &mut Project, clip: &str, ripple: bool) -> Result<()> {
 pub fn ripple_region(p: &mut Project, start: Tick, end: Tick) -> Result<()> {
     ensure!(start >= 0 && end > start, "Invalid ripple region");
     let mut result = vec![];
+    let mut right_groups = std::collections::HashMap::new();
     for c in &p.clips {
         if p.tracks[c.lane].locked || c.end() <= start {
             result.push(c.clone());
@@ -205,6 +332,9 @@ pub fn ripple_region(p: &mut Project, start: Tick, end: Tick) -> Result<()> {
             let mut right = c.clone();
             if c.start < start {
                 right.id = id();
+                if let Some(group) = &c.link {
+                    right.link = Some(right_groups.entry(group.clone()).or_insert_with(id).clone());
+                }
             }
             right.source_in += end - c.start;
             right.duration = c.end() - end;

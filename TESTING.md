@@ -20,9 +20,9 @@ pointer/keyboard/drop events into the actual native window, targeting rectangles
 observed from the previous UI pass. It uses real controls, commands and workers.
 The distributed release excludes this driver.
 
-## Passed automated checks
+## Current 0.1.1 checks
 
-**16 core/UI tests and all 5 real-media integration tests pass.** They cover
+**18 core/UI tests and all 5 real-media integration tests pass.** They cover
 insertion, split, trim, order/move, locks, snap, all ripple intersections, exact
 frame/sample conversions, atomic failure, undo/redo, source overwrite refusal,
 gain limits, save/reopen/backup equivalence, populated migrations and shortcut
@@ -37,9 +37,9 @@ odd-sized 4:4:4 video, delayed PCM audio, MP3 and HEVC MOV imports. Tests verify
 * Reopen/edit/export again and cancellation preserving an existing destination.
 * Persistent preview frame colors, exact seeks and playback advancement.
 * Captured preview PCM versus decoded export: sampled RMS ratios approximately
-  1.0026, 1.0004, 1.0006, 1.0006; the AAC comparison tolerance is 3%.
+  1.0026, 1.0004, 0.9981, 0.9983; the AAC comparison tolerance is 3%.
 * VFR frames at PTS 0, .2 and .7 cut at .5: preview/export show the covering .2
-  frame until .7. Source caches preserve this rule.
+  frame until .7. The persistent native decoder preserves this rule without source caches.
 * Two one-frame 60 fps clips exported at 30 fps produce one video frame.
 * Black video gaps display correctly while independent audio keeps playing.
 
@@ -49,7 +49,7 @@ Three ten-minute videos include 1080p60 and mixed resolution/FPS. Four microphon
 files have mixed levels and sample rates. Videos loop six-second moving patterns;
 voices are modulated tonal signals. These are not actual gameplay or speech.
 
-Session 1 passed **193 GUI steps**: import seven recordings, assemble 240 seconds,
+The 0.1.0 baseline passed **193 GUI steps**: import seven recordings, assemble 240 seconds,
 remove ten one-second segments, reorder three sections, position four distinct
 microphones, match LUFS, lower gameplay, add fades, exercise drag import/audio
 lane moves/edge trims/video reorder and undo restoration, preview, save, and
@@ -63,6 +63,16 @@ recover through the GUI dialog, verify changed gain -13 dB while the manual save
 remains 0 dB, and verify recovered work is dirty with no manual save path. This
 intentional termination test is separate from crash-free editing acceptance.
 Reports are preserved in docs/verification; generated media/logs are test-output.
+
+The 0.1.1 driver additionally verifies separate linked A/V, one-click split, ordinary
+trim extension without moving the clip, fixed-end left trim, top-corner video/audio
+fades, unlinking, independent lane movement, undo, playback, saving and GPU export.
+The full acceptance/recovery scripts now operate on four lanes and 30 explicit clips.
+Current runs passed 202 + 14 + 48 GUI steps, both normal exports used NVIDIA NVENC,
+and both recovery phases passed. The first full session took about 89 seconds,
+including editing and export, without creating video/PCM preparation caches.
+RF64 capture duration checks detect duplicated output during load/seek; delayed
+mono resampling is checked in both preview and export. Video mute exports black.
 
 ## Native OS checks and remaining manual work
 
@@ -84,9 +94,10 @@ framebuffer capture is saved after the workspace settles. It is local and opt-in
 
 AMD Ryzen 7 7800X3D, 8 cores/16 threads, 127 GiB RAM, Windows x64. The adapter
 benchmark seeks a ten-second tail from a synthetic ten-minute 1080p60 source and
-renders 960x540, excluding UI texture upload. Warm caches measured **59.25 fps**,
-**13-69 ms** seeks, **43 ms** adapter initialize/load and **0.83 ms** warm plan
-preparation. Initial source caching is a separate lengthy job with real progress;
-the 30-minute dataset used about 1.75 GB of video caches. Cold native startup and
-worst-case unique gameplay performance have not been benchmarked. These results
-are observations on this hardware, not general performance promises.
+renders 960x540, excluding UI texture upload. The new adapter needs no video/PCM
+cache preparation. The latest on-demand run measured roughly **59 fps**, **27-120 ms**
+seeks and less than 0.1 ms preview snapshot preparation. First-frame startup including adapter/device initialization was
+about 0.52 s in the final run. Results use a synthetic ten-minute recording and are observations,
+not a guarantee for all codecs, GOP structures, disks or actual gameplay. Detailed
+0.1.1 reports are under docs/verification/0.1.1. The earlier 0.1.0 warm-cache benchmark
+and full GUI reports remain as historical evidence in the parent folder.

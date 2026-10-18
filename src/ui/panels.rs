@@ -231,7 +231,7 @@ impl Editor {
                             append = Some((m.id.clone(), 0));
                             ui.close_menu();
                         }
-                        for lane in 1..3 {
+                        for lane in 1..LANES {
                             if ui.button(format!("Append audio to lane {lane}")).clicked() {
                                 append = Some((m.id.clone(), lane));
                                 ui.close_menu();
@@ -252,8 +252,9 @@ impl Editor {
         ui.separator();
         ui.horizontal(|ui| {
             ui.label("Audio destination");
-            ui.selectable_value(&mut self.audio_lane, 1, "1");
-            ui.selectable_value(&mut self.audio_lane, 2, "2");
+            ui.selectable_value(&mut self.audio_lane, 1, "A1");
+            ui.selectable_value(&mut self.audio_lane, 2, "A2");
+            ui.selectable_value(&mut self.audio_lane, 3, "A3");
         });
         ui.horizontal(|ui| {
             if ui.button("Append selected").clicked()
@@ -387,11 +388,17 @@ impl Editor {
                 self.action(Action::Right);
             }
             ui.monospace(timecode(self.playhead, self.p.fps));
+            if self.source_preview {
+                ui.small("TRIM · source frame");
+            }
             ui.label("/");
             ui.monospace(timecode(self.p.duration(), self.p.fps));
-            if self.preview_job.is_some() {
+            if self.preview_job.is_some()
+                || self.player.as_ref().is_some_and(|p| !p.snapshot().loaded)
+                    && self.p.duration() > 0
+            {
                 ui.spinner();
-                ui.small("Preparing mix");
+                ui.small("Opening sources…");
             }
         });
         let mut time = seconds(self.playhead);
@@ -439,34 +446,58 @@ impl Editor {
             .and_then(|id| self.p.clips.iter().find(|c| &c.id == id))
             .cloned();
         if let Some(c) = selected {
-            let name = self
-                .p
-                .media(&c.media)
-                .map(|m| m.name.clone())
-                .unwrap_or_default();
-            ui.label(name);
+            ui.label(
+                self.p
+                    .media(&c.media)
+                    .map(|m| m.name.clone())
+                    .unwrap_or_default(),
+            );
             let locked = self.p.tracks[c.lane].locked;
-            ui.add_enabled_ui(!locked,|ui|{
-            let mut start=seconds(c.start);let mut source=seconds(c.source_in);let mut duration=seconds(c.duration);let mut gain=c.gain_db;let mut fi=seconds(c.fade_in);let mut fo=seconds(c.fade_out);let mut mute=c.mute;
-            egui::Grid::new("properties").num_columns(2).spacing([8.,8.]).show(ui,|ui|{
-                for(label,value)in[("Position (s)",&mut start),("Source in (s)",&mut source),("Duration (s)",&mut duration),("Gain (dB)",&mut gain),("Fade in (s)",&mut fi),("Fade out (s)",&mut fo)]{ui.label(label);let response=ui.add(egui::DragValue::new(value).speed(if label=="Gain (dB)"{0.2}else{1./60.}).max_decimals(3));trace(ui.ctx(),label,&response);
-                    // egui persists keyboard text across frames, but DragValue writes
-                    // its parsed value into this frame's local copy on commit.
-                    if response.changed(){let id=c.id.clone();let new_value=*value;let label=label.to_string();self.apply(move|p|{let fps=p.fps;let cl=p.clips.iter_mut().find(|x|x.id==id).context("Clip removed")?;match label.as_str(){"Position (s)"=>cl.start=fps.align(ticks(new_value)),"Source in (s)"=>cl.source_in=fps.align(ticks(new_value)),"Duration (s)"=>{cl.duration=fps.align(ticks(new_value));cl.clamp_fades();},"Gain (dB)"=>cl.gain_db=new_value,"Fade in (s)"=>cl.fade_in=ticks(new_value),_=>cl.fade_out=ticks(new_value)}Ok(())});}ui.end_row();}
+            ui.add_enabled_ui(!locked, |ui| {
+                egui::Grid::new("properties").num_columns(2).spacing([8.,8.]).show(ui, |ui| {
+                    for (label, mut value) in [("Position (s)",seconds(c.start)),("Source in (s)",seconds(c.source_in)),("Duration (s)",seconds(c.duration)),("Gain (dB)",c.gain_db),("Fade in (s)",seconds(c.fade_in)),("Fade out (s)",seconds(c.fade_out))] {
+                        if label == "Gain (dB)" && c.lane == 0 {continue;}
+                        ui.label(label);
+                        let response=ui.add(egui::DragValue::new(&mut value).speed(if label=="Gain (dB)" {0.2} else {1./60.}).range(if label=="Gain (dB)" {-60.0..=60.0} else {0.0..=86400.0}).max_decimals(3));
+                        trace(ui.ctx(),label,&response);
+                        #[cfg(feature="gui-test")]
+                        if label=="Duration (s)" {let info=format!("value={value} focus={} changed={} clicked={} hovered={} rect={:?} ptr={:?}",response.has_focus(),response.changed(),response.clicked(),response.hovered(),response.rect,ui.ctx().pointer_latest_pos());ui.ctx().data_mut(|d| d.insert_temp(Id::new("duration-debug"), info));}
+                        if response.changed() {
+                            let id=c.id.clone();
+                            self.apply(|p| {
+                                let at=p.fps.align(ticks(value));
+                                match label {
+                                    "Position (s)"=>edit::move_clip(p,&id,at,c.lane)?,
+                                    "Source in (s)"=>edit::trim(p,&id,at,c.duration,false)?,
+                                    "Duration (s)"=>edit::trim(p,&id,c.source_in,at,false)?,
+                                    _=> {let item=p.clips.iter_mut().find(|x|x.id==id).context("Clip removed")?;
+                                        match label {"Gain (dB)"=>item.gain_db=value,"Fade in (s)"=>item.fade_in=ticks(value).min(item.duration),_=>item.fade_out=ticks(value).min(item.duration)}
+                                    }
+                                }
+                                Ok(())
+                            });
+                        }
+                        ui.end_row();
+                    }
+                });
+                let mut mute=c.mute;
+                if ui.checkbox(&mut mute,if c.lane==0 {"Hide video"} else {"Mute clip"}).changed(){let id=c.id.clone();self.apply(|p|{p.clips.iter_mut().find(|x|x.id==id).unwrap().mute=mute;Ok(())});}
+                if c.lane>0 && ui.button("Match loudness · -16 LUFS").on_hover_text("Measure this source range. Target -16 LUFS with a -1 dBTP ceiling. Gain up to +48 dB; digital silence is refused.").clicked(){self.normalize();}
+                let linked=c.link.is_some();
+                let link_button=ui.button(if linked {"Unlink audio / video"} else {"Link matching audio / video"}); trace(ui.ctx(),"unlink",&link_button);
+                if link_button.on_hover_text("Linked clips move, split, trim and delete together. Gain and fades remain independent.").clicked(){self.edit_selected(|p,id|if linked {edit::unlink(p,id)} else {edit::link(p,id)});}
+                ui.horizontal(|ui| {
+                    let earlier=ui.button("Earlier"); trace(ui.ctx(),"earlier",&earlier);
+                    if earlier.clicked(){self.edit_selected(|p,id|edit::reorder(p,id,-1));}
+                    let later=ui.button("Later");trace(ui.ctx(),"later",&later);if later.clicked(){self.edit_selected(|p,id|edit::reorder(p,id,1));}
+                });
+                ui.small("Edges: trim with the opposite edge fixed. Top corners: fade. Linked sound stays in sync.");
             });
-            if ui.checkbox(&mut mute,"Mute clip").changed(){let id=c.id.clone();self.apply(|p|{p.clips.iter_mut().find(|x|x.id==id).unwrap().mute=mute;Ok(())});}
-            if ui.button("Match voice loudness · −16 LUFS").on_hover_text("Measure selected source range. Limit boost to +18 dB and true peak to −1 dBTP; silence below −50 LUFS is refused.").clicked(){self.normalize();}
-            ui.horizontal(|ui|{
-                let earlier=ui.button("Earlier");trace(ui.ctx(),"earlier",&earlier);if earlier.clicked(){self.edit_selected(|p,id|edit::reorder(p,id,-1));}
-                if ui.button("Later").clicked(){self.edit_selected(|p,id|edit::reorder(p,id,1));}
-            });
-            ui.label("Drag clip edges to trim. Primary trims ripple downstream unlocked material.");
-        });
             if locked {
                 ui.colored_label(Color32::YELLOW, "Track is locked");
             }
         } else {
-            ui.label("Select a timeline clip to adjust its source range, gain and fades.");
+            ui.label("Click a clip to select it and position the playhead. Press S to split.");
         }
         ui.separator();
         let mut protect = self.p.peak_protection;

@@ -1,0 +1,15 @@
+{
+  "reported_version": "0.1.3",
+  "reported_error": "Seek failed (to 3768400, size 2163280)",
+  "synthetic_before_fix_error": "Seek failed (to 3735632, size 2163280)",
+  "reproduction": "Load a 12-second sine-wave source paused at 9.8 seconds; shorten the edit to 5.633333333 seconds and reload at the stale position.",
+  "fix": "Clamp UI playhead after edits and frame alignment; clamp playback loads/seeks to their project; discard an earlier queued seek when a new load supersedes it; implement regular-file seek/EOF semantics.",
+  "regressions": [
+    "shortened timeline and out-of-range seek recovery with audible playback",
+    "rapid queued long/short reloads and seeks",
+    "virtual stream EOF probes and backward seeks",
+    "bounded local logs and preservation of unrelated files",
+    "53-step native GUI drag, trim, delete, undo, playback, save, export"
+  ],
+  "privacy": "Only synthetic test media was used. Playback logs stay local."
+}

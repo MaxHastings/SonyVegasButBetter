@@ -220,7 +220,9 @@ extern "C" fn read(cookie: *mut c_void, buf: *mut c_char, n: u64) -> i64 {
 extern "C" fn seek(cookie: *mut c_void, offset: i64) -> i64 {
     let cookie = unsafe { &*(cookie as *const Cookie) };
     let s = unsafe { &mut *cookie.data.get() };
-    if offset < 0 || offset > s.length {
+    // Like a regular file, seeking past EOF succeeds and the next read is empty.
+    // Demuxers may probe there; it must not become a playback failure.
+    if offset < 0 {
         return -1;
     }
     s.position = offset;
@@ -260,4 +262,39 @@ pub(crate) extern "C" fn open(user: *mut c_void, _uri: *mut c_char, info: *mut S
         };
     }
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn virtual_stream_accepts_eof_probes_and_can_seek_back() {
+        let factory = Factory {
+            rt: Runtime {
+                ffmpeg: Default::default(),
+                ffprobe: Default::default(),
+                mpv: Default::default(),
+                cache: Default::default(),
+            },
+            project: Mutex::new(Project::default()),
+            error: Default::default(),
+        };
+        let data = Stream::new(&factory);
+        let mut cookie = Cookie {
+            cancelled: data.cancelled.clone(),
+            data: UnsafeCell::new(data),
+        };
+        let ptr = (&mut cookie as *mut Cookie).cast();
+        let mut buffer = [0u8; 80];
+        for offset in [80, 3768400, i64::MAX] {
+            assert_eq!(seek(ptr, offset), offset);
+            assert_eq!(read(ptr, buffer.as_mut_ptr().cast(), 80), 0);
+            assert_eq!(size(ptr), 80);
+        }
+        assert_eq!(seek(ptr, -1), -1);
+        assert_eq!(seek(ptr, 0), 0);
+        assert_eq!(read(ptr, buffer.as_mut_ptr().cast(), 80), 80);
+        assert_eq!(&buffer[..4], b"RF64");
+        assert!(factory.error.lock().unwrap().is_none());
+    }
 }

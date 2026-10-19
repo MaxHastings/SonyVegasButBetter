@@ -4,6 +4,7 @@ pub mod media;
 pub mod model;
 pub mod persistence;
 pub mod playback;
+mod playback_log;
 pub mod render;
 pub mod ui;
 pub mod video;

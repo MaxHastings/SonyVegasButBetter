@@ -68,7 +68,44 @@ impl Harness {
     pub fn new(stage: &str) -> Self {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-output");
         let mut steps = VecDeque::new();
-        if stage == "placement" {
+        if stage == "seek-resize" {
+            steps.push_back(Step::Drop);
+            steps.push_back(Step::Wait("imported"));
+            for _ in 0..6 {
+                steps.push_back(key(Key::ArrowUp, Modifiers::ALT));
+            }
+            steps.push_back(click("media:gameplay-1.mp4"));
+            steps.push_back(key(Key::Enter, Modifiers::COMMAND));
+            prop(&mut steps, "Duration (s)", "2");
+            prop(&mut steps, "Position (s)", "8");
+            steps.push_back(Step::Wait("preview"));
+            steps.push_back(click("fit"));
+            steps.push_back(Step::Click(Target::Ruler(9.8)));
+            // A body drag seeks on pointer-down, then shortens the timeline
+            // on release. Cover the actual reported mouse interaction.
+            steps.push_back(Step::Drag(Target::ClipAt(0, 9.5), Target::LaneAt(0, 3.5)));
+            steps.push_back(Step::Wait("preview"));
+            steps.push_back(Step::Assert("shortened-playhead"));
+            steps.push_back(key(Key::Z, Modifiers::COMMAND));
+            steps.push_back(Step::Wait("preview"));
+            steps.push_back(Step::Click(Target::Ruler(9.8)));
+            prop(&mut steps, "Duration (s)", "0.5");
+            steps.push_back(Step::Wait("preview"));
+            steps.push_back(Step::Assert("bounded-playhead"));
+            steps.push_back(key(Key::Z, Modifiers::COMMAND));
+            steps.push_back(Step::Wait("preview"));
+            steps.push_back(Step::Click(Target::Ruler(9.8)));
+            steps.push_back(key(Key::Delete, Modifiers::NONE));
+            steps.push_back(Step::Assert("empty-playhead"));
+            steps.push_back(key(Key::Z, Modifiers::COMMAND));
+            steps.push_back(Step::Wait("preview"));
+            steps.push_back(Step::Click(Target::Ruler(8.2)));
+            steps.push_back(key(Key::Space, Modifiers::NONE));
+            steps.push_back(Step::Wait("seek-resize-played"));
+            steps.push_back(key(Key::Space, Modifiers::NONE));
+            steps.push_back(Step::Capture("timeline-seek-resize.png"));
+            steps.push_back(Step::Wait("captured"));
+        } else if stage == "placement" {
             steps.push_back(Step::Drop);
             steps.push_back(Step::Wait("imported"));
             for _ in 0..6 {
@@ -645,6 +682,7 @@ impl Harness {
                                 && app.player.as_ref().is_some_and(|p| p.snapshot().loaded)
                         }
                         "played" => app.playhead > HZ * 2,
+                        "seek-resize-played" => app.playhead > ticks(8.4),
                         "saved" => !app.dirty && !app.saving,
                         "rendered" => app.rendered.is_some() && app.render_job.is_none(),
                         "captured" => app.capture_path.is_none(),
@@ -658,6 +696,24 @@ impl Harness {
                     }
                 }
                 Step::Assert(condition) => match *condition {
+                    "shortened-playhead" => {
+                        anyhow::ensure!(
+                            app.p.duration() == HZ * 4,
+                            "Drag must shorten the timeline"
+                        );
+                        anyhow::ensure!(
+                            app.playhead <= app.p.duration(),
+                            "Drag left a stale playhead"
+                        );
+                    }
+                    "bounded-playhead" => anyhow::ensure!(
+                        app.playhead <= app.p.duration(),
+                        "Edit left a stale playhead"
+                    ),
+                    "empty-playhead" => anyhow::ensure!(
+                        app.p.clips.is_empty() && app.playhead == 0,
+                        "Deleting the last event must reset the playhead"
+                    ),
                     "drag-preview" => anyhow::ensure!(
                         app.drag.as_ref().is_some_and(|d| d.edge == 0)
                             && app.p.lane(0)[1].start == 4 * HZ

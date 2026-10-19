@@ -182,6 +182,7 @@ enum Control {
     Stop,
 }
 pub struct Player {
+    log_path: Option<std::path::PathBuf>,
     tx: mpsc::Sender<Control>,
     pub state: Arc<Mutex<Snapshot>>,
     pub frame: Arc<Mutex<Option<Frame>>>,
@@ -218,6 +219,11 @@ impl Player {
         )
     }
     fn with_options(rt: &Runtime, extra: Vec<(String, String)>) -> Result<Self> {
+        let mut log = rt
+            .cache
+            .parent()
+            .and_then(|dir| crate::playback_log::PlaybackLog::open(&dir.join("logs")).ok());
+        let log_path = log.as_ref().map(|log| log.path.clone());
         let api = Arc::new(Api::load(rt)?);
         let (tx, rx) = mpsc::channel();
         let state = Arc::new(Mutex::new(Snapshot {
@@ -331,6 +337,10 @@ impl Player {
                 for cmd in rx.try_iter() {
                     let result = match cmd {
                         Control::Seek(at) => {
+                            let at = at.clamp(0, project.as_ref().map_or(0, Project::duration));
+                            if let Some(log) = &mut log {
+                                log.write(format_args!("Seek to {}s", seconds(at)));
+                            }
                             anchor = None;
                             last_audio = None;
                             source_override = None;
@@ -354,6 +364,7 @@ impl Player {
                                 last_audio = None;
                                 awaiting_seek = None;
                                 pending_seek = None;
+                                seek = None;
                                 video.request(None, 0, 1.);
                                 st.lock().unwrap().loaded = false;
                             }
@@ -397,6 +408,18 @@ impl Player {
                             Ok(())
                         }
                         Control::Load(plan, at, play) => {
+                            let at = at.clamp(0, plan.project.duration());
+                            // A seek queued for the previous edit must not overwrite
+                            // this load's bounded position after the batch is drained.
+                            seek = None;
+                            if let Some(log) = &mut log {
+                                log.write(format_args!(
+                                    "Load {} events, duration {}s, position {}s, play={play}",
+                                    plan.project.clips.len(),
+                                    seconds(plan.project.duration()),
+                                    seconds(at)
+                                ));
+                            }
                             awaiting_seek = None;
                             anchor = None;
                             last_audio = None;
@@ -432,6 +455,9 @@ impl Player {
                     if let Err(e) = result
                         && let Ok(mut s) = st.lock()
                     {
+                        if let Some(log) = &mut log {
+                            log.write(format_args!("Command failed: {e}"));
+                        }
                         s.error = Some(e.to_string());
                     }
                 }
@@ -474,10 +500,15 @@ impl Player {
                         }
                     }
                     if e.kind == 2 && !e.data.is_null() {
-                        let log = unsafe { &*(e.data as *const Log) };
-                        if log.log_level <= 20 && !log.text.is_null() {
-                            let msg = unsafe { CStr::from_ptr(log.text) }.to_string_lossy();
-                            if let Ok(mut s) = st.lock() {
+                        let entry = unsafe { &*(e.data as *const Log) };
+                        if entry.log_level <= 30 && !entry.text.is_null() {
+                            let msg = unsafe { CStr::from_ptr(entry.text) }.to_string_lossy();
+                            if let Some(diagnostic) = &mut log {
+                                diagnostic.write(format_args!("mpv: {}", msg.trim()));
+                            }
+                            if entry.log_level <= 20
+                                && let Ok(mut s) = st.lock()
+                            {
                                 s.error = Some(msg.trim().into());
                             }
                         }
@@ -485,6 +516,12 @@ impl Player {
                     if e.error < 0
                         && let Ok(mut s) = st.lock()
                     {
+                        if let Some(log) = &mut log {
+                            log.write(format_args!(
+                                "Playback error {} (event {})",
+                                e.error, e.kind
+                            ));
+                        }
                         s.error = Some(format!("Playback error {} (event {})", e.error, e.kind));
                     }
                 }
@@ -567,9 +604,15 @@ impl Player {
                     }
                 }
                 if let Some(error) = factory.error.lock().unwrap().take() {
+                    if let Some(log) = &mut log {
+                        log.write(format_args!("Audio: {error}"));
+                    }
                     st.lock().unwrap().error = Some(error);
                 }
                 if let Some(error) = video.error.lock().unwrap().take() {
+                    if let Some(log) = &mut log {
+                        log.write(format_args!("Video: {error}"));
+                    }
                     st.lock().unwrap().error = Some(error);
                 }
                 if let Some(frame) = fr.lock().unwrap().as_ref() {
@@ -592,6 +635,7 @@ impl Player {
             anyhow::bail!(e);
         }
         Ok(Self {
+            log_path,
             tx,
             state,
             frame,
@@ -601,6 +645,9 @@ impl Player {
     }
     pub fn load(&self, plan: PreviewPlan, at: Tick, play: bool) {
         let _ = self.tx.send(Control::Load(plan, at, play));
+    }
+    pub fn log_path(&self) -> Option<&std::path::Path> {
+        self.log_path.as_deref()
     }
     pub fn send(&self, args: &[&str]) {
         let _ = self.tx.send(Control::Command(

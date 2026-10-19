@@ -50,6 +50,16 @@ impl Editor {
                     if ui.button("Dismiss").clicked() {
                         self.error = None;
                     }
+                    if let Some(path) = self.player.as_ref().and_then(Player::log_path) {
+                        if ui.button("Copy error details").clicked() {
+                            ctx.copy_text(format!(
+                                "SVBB {}\n{error}\nPlayback log: {}",
+                                env!("CARGO_PKG_VERSION"),
+                                path.display()
+                            ));
+                        }
+                        ui.small(format!("Playback log: {}", path.display()));
+                    }
                 });
             if !open {
                 self.error = None;

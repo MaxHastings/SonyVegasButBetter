@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.4 — Preview seek fix
+
+- Fix “Seek failed” errors when moving, trimming or deleting clips shortens the
+  timeline while the playhead is beyond the new end.
+- Bound reloads and seeks to the current edit, discard queued seeks for older
+  edits, and handle end-of-file probes without reporting a media failure.
+- Save bounded local playback logs and expose their path in error dialogs with
+  a Copy error details button. No telemetry or automatic log uploads.
+- Add real-runtime and native GUI regressions for shortening edits and resuming
+  playback, plus virtual stream and log retention checks.
+
 ## 0.1.3 — First Windows preview
 
 - Edit long recordings immediately using on-demand playback and progressive waveforms.

@@ -485,7 +485,7 @@ fn play_intent_survives_immediate_reload_seek_and_rapid_toggles() {
         player.toggle();
         player.toggle();
         let start = std::time::Instant::now();
-        while player.snapshot().position <= HZ + HZ / 4
+        while (player.snapshot().position <= HZ + HZ / 4 || player.snapshot().paused)
             && start.elapsed() < std::time::Duration::from_secs(4)
         {
             std::thread::sleep(std::time::Duration::from_millis(20));
@@ -496,6 +496,92 @@ fn play_intent_survives_immediate_reload_seek_and_rapid_toggles() {
             "Play was lost while loading/seeking"
         );
         player.pause();
+        let start = std::time::Instant::now();
+        while !player.snapshot().paused && start.elapsed() < std::time::Duration::from_secs(4) {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(player.snapshot().paused);
+    }
+}
+
+#[test]
+#[ignore]
+fn shortened_timeline_clamps_stale_playhead_and_remains_seekable() {
+    let rt = Runtime::discover().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("moving-clips.wav");
+    let out = command(&rt.ffmpeg)
+        .args([
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=48000:duration=12",
+        ])
+        .arg(&source)
+        .output()
+        .unwrap();
+    check(&out, "Create timeline resize fixture").unwrap();
+    let media = rt.probe(&source).unwrap();
+    let mut p = Project::default();
+    p.clips.push(Clip::new(&media, 1, 0));
+    p.media.push(media);
+    let player = svbb::playback::Player::headless(&rt).unwrap();
+    let plan = |p: &Project| render::prepare_preview(&rt, p, &AtomicBool::new(false)).unwrap();
+    let wait_loaded = |position: Tick| {
+        let start = std::time::Instant::now();
+        while (!player.snapshot().loaded || player.snapshot().position != position)
+            && start.elapsed() < std::time::Duration::from_secs(5)
+        {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(
+            player.snapshot().loaded,
+            "Preview did not load: {:?}",
+            player.snapshot().error
+        );
+        assert_eq!(player.snapshot().position, position);
         std::thread::sleep(std::time::Duration::from_millis(100));
+    };
+    player.load(plan(&p), ticks(9.8), false);
+    wait_loaded(ticks(9.8));
+    assert!(player.take_error().is_none());
+
+    // Moving the last event left, trimming it, or deleting a later event can
+    // shorten the mix while the UI still has a playhead beyond its new end.
+    p.clips[0].duration = ticks(5.633333333);
+    player.load(plan(&p), ticks(9.8), false);
+    wait_loaded(p.duration());
+    let error = player.take_error();
+    assert!(
+        error.is_none(),
+        "Reloading a shorter edit must not seek outside its new audio stream: {error:?}"
+    );
+    assert!(player.snapshot().loaded);
+    assert!(player.snapshot().position <= p.duration());
+    for target in [ticks(9.8), -HZ, HZ, p.duration(), HZ / 2] {
+        player.seek(target);
+        wait_loaded(target.clamp(0, p.duration()));
+        assert!(player.take_error().is_none(), "Seek failed at {target}");
+        assert!((0..=p.duration()).contains(&player.snapshot().position));
+    }
+    player.toggle();
+    std::thread::sleep(std::time::Duration::from_millis(450));
+    assert!(player.snapshot().position > HZ / 2 + HZ / 5);
+    assert!(player.snapshot().peak_db.iter().any(|v| *v > -60.));
+    assert!(player.take_error().is_none());
+    player.pause();
+    for iteration in 0..4 {
+        p.clips[0].duration = HZ * 12;
+        player.load(plan(&p), ticks(9.8), false);
+        player.seek(ticks(9.8));
+        p.clips[0].duration = ticks(5.633333333) + p.fps.frame(iteration + 1);
+        player.load(plan(&p), ticks(9.8), false);
+        player.seek(ticks(9.8));
+        wait_loaded(p.duration());
+        assert!(player.take_error().is_none());
+        assert_eq!(player.snapshot().position, p.duration());
     }
 }

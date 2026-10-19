@@ -396,6 +396,7 @@ impl Editor {
                 "qol" => "gui-qol.svbb",
                 "crop-size" => "gui-crop-size.svbb",
                 "placement" => "gui-placement.svbb",
+                "seek-resize" => "gui-seek-resize.svbb",
                 _ => "gui-session.svbb",
             }));
             if stage == "crash-read"
@@ -410,6 +411,7 @@ impl Editor {
         app
     }
     fn edited(&mut self) {
+        self.playhead = self.playhead.clamp(0, self.p.duration());
         self.revision += 1;
         self.dirty = self.recovered_unsaved || self.p != self.saved;
         self.preview_revision = None;
@@ -665,7 +667,11 @@ impl Editor {
     fn seek(&mut self, t: Tick) {
         self.refresh_crop_preview();
         self.source_preview = false;
-        self.playhead = self.p.fps.align(t.clamp(0, self.p.duration()));
+        self.playhead = self
+            .p
+            .fps
+            .align(t.clamp(0, self.p.duration()))
+            .min(self.p.duration());
         if let Some(player) = &self.player {
             player.pause();
         }

@@ -39,7 +39,23 @@ pointer/keyboard/drop events into the actual native window, targeting rectangles
 observed from the previous UI pass. It uses real controls, commands and workers.
 The distributed release excludes this driver.
 
-## Current 0.1.3 checks
+## Current 0.1.4 checks
+
+30 core/UI/budget checks and ten real-media tests cover the current editor.
+
+The seek regression reproduces the 0.1.3 error with a 12-second source, a playhead
+at 9.8 seconds and a shortened 5.633-second mix (2,163,280 bytes). It checks bounds
+on reload and direct seeks, EOF recovery, audible playback and queued rapid reloads.
+The `seek-resize` native GUI stage moves a linked clip left to shorten the edit,
+trims through the old playhead, deletes the final event, undoes and resumes playback.
+Virtual-stream tests cover seeking beyond EOF and back. Log tests check the
+1 MiB/session and eight-session bounds while preserving unrelated files.
+The reproduction and native GUI evidence are in docs/verification/0.1.4.
+
+Run `SVBB_GUI_TEST=seek-resize` with the `gui-test` build and acceptance media as
+for the existing native GUI stages. The distributed executable excludes this driver.
+
+## Previous 0.1.3 checks
 
 28 core/UI/budget tests include nearest-legal drag placement, exact-fit gaps,
 off-frame audio boundaries, linked-lane obstacles, locked/no-space atomicity,

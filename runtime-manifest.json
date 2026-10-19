@@ -53,5 +53,24 @@
   "ffmpeg_source": "https://github.com/FFmpeg/FFmpeg/commit/946fcce07b",
   "mpv_source": "https://github.com/mpv-player/mpv/commit/69e63f425a",
   "mpv_build_source": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20260903",
-  "preview_ffmpeg_build_source": "https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-10-18-13-01"
+  "preview_ffmpeg_build_source": "https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-10-18-13-01",
+  "vulkan_loader": {
+    "version": "1.4.363",
+    "source_archives": [
+      {
+        "file": "Vulkan-Loader.zip",
+        "root": "Vulkan-Loader-1.4.363",
+        "url": "https://codeload.github.com/KhronosGroup/Vulkan-Loader/zip/refs/tags/v1.4.363",
+        "sha256": "224ecdfae7a2de74181b2139e4798b923ca41844aa41489fe5e327d1dfc1f135"
+      },
+      {
+        "file": "Vulkan-Headers.zip",
+        "root": "Vulkan-Headers-1.4.363",
+        "url": "https://codeload.github.com/KhronosGroup/Vulkan-Headers/zip/refs/tags/v1.4.363",
+        "sha256": "112c94f35e6ff2f85d4b92b50d0611883a6467dab202a2547312defb87351c16"
+      }
+    ],
+    "build_script": "scripts/build-windows-support.ps1",
+    "runtime_linkage": "static MSVC runtime; app-local loader only; no driver or system installation"
+  }
 }

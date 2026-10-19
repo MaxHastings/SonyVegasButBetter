@@ -86,3 +86,15 @@ dependencies remains unresolved; do not upload that bundle as a public release.
 Existing native source/build references above document provenance, but are not
 presented as a complete offline source bundle. H.264/AAC patent licensing is not
 resolved by the application license. No proprietary distribution rights are asserted.
+
+## App-local Vulkan loader
+
+The public archive includes Vulkan-Loader 1.4.363 and its Vulkan-Headers inputs,
+built without source modifications using a static MSVC runtime. Source archives
+(with pinned SHA-256 hashes), build instructions and upstream license texts ship
+with the download. Source provenance: https://github.com/KhronosGroup/Vulkan-Loader/tree/v1.4.363
+and https://github.com/KhronosGroup/Vulkan-Headers/tree/v1.4.363. The loader uses
+Apache-2.0 with more permissive exceptions recorded in its LICENSES directory;
+header notices are retained separately. This loader does not install a GPU driver
+or change any system files. It satisfies libmpv's loader dependency even when a
+Vulkan loader has not been installed system-wide.

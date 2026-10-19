@@ -22,6 +22,7 @@ function Test-Runtime([string]$directory) {
 
 try {
     if (![Environment]::Is64BitProcess) { throw 'Use 64-bit Windows PowerShell on Windows 10/11 x64.' }
+    if (!(Test-Path -LiteralPath (Join-Path $packageDir 'vulkan-1.dll') -PathType Leaf)) { throw 'The bundled Vulkan loader is missing. Extract the entire release ZIP again.' }
     if (!(Test-Runtime $runtimeDir)) {
         $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
         if (!(Test-Path -LiteralPath $tar)) { throw 'Windows tar.exe is missing. This package requires a current Windows 10/11 installation.' }

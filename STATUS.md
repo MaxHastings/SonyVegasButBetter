@@ -44,7 +44,7 @@ Windows verification is recorded in TESTING.md and docs/verification/0.1.3.
 exports. Windows, macOS and Linux CI passed for the editor implementation. The
 real-footage playtest gate remains open; macOS/Linux GUI behavior is unverified.
 
-Run artifacts/SVBB-0.1.3-windows-x64/SonyVegasButBetter.exe with its runtime folder.
+Run artifacts/SVBB-0.1.3-windows-x64-first-run/Start SVBB.cmd.
 For the public download, extract the ZIP and run Start SVBB.cmd; first setup needs
 internet, subsequent launches work offline. Old generated builds are removed.
 Projects saved by 0.1.2 and 0.1.3 use schema 4 and
@@ -59,3 +59,7 @@ Manual checks still include real speech/gameplay listening, physical mouse/DPI
 variants, audio-device loss, OS file-drop delivery and long unique-source workloads.
 Public redistribution retains the native-runtime corresponding-source/notice and
 codec distribution review items described in LICENSES.md.
+
+Windows release builds statically link the MSVC/C++ runtime. The public archive
+includes an app-local Vulkan loader built from pinned source, with source archives
+and notices. No Visual C++ or Vulkan system installer is required.

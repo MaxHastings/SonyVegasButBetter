@@ -3,7 +3,8 @@
 1. Start from a clean main checkout; update the version/changelog as appropriate.
 2. Run the checks in TESTING.md, including real media and the native GUI stage(s)
    affected by the change. Build with `cargo build --release --locked`, without
-   gui-test. Keep Windows/macOS/Linux CI green.
+   gui-test. Windows packaging also audits PE imports and builds the app-local
+   Vulkan loader from pinned source with static compiler-runtime linkage. Keep Windows/macOS/Linux CI green.
 3. Commit source/docs first. Run `powershell -File scripts/package-windows-release.ps1`.
    It embeds `git archive HEAD` and refuses to mix an existing output directory.
 4. Verify all SHA256SUMS entries, the executable against the built binary, the

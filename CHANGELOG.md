@@ -15,7 +15,8 @@
 - SQLite projects, undo/redo, recovery saves and missing-media relinking.
 
 The public Windows ZIP includes a first-run launcher: it downloads checksum-pinned
-media tools directly from upstream once, then runs offline. No admin access, Rust,
+media tools directly from upstream once, then runs offline. Static compiler runtime and app-local Vulkan loader remove separate runtime
+installer requirements. No admin access, Rust,
 or separate archive tool is needed. Windows 10/11 x64; unsigned early preview.
 
 Verified locally: 28 model/UI/budget tests, nine real-media tests, 170 native GUI

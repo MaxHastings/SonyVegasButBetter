@@ -1,0 +1,33 @@
+{
+  "static_compiler_runtime": true,
+  "separate_VC_runtime_imports": false,
+  "app_local_vulkan_loader": "1.4.363 built from pinned unmodified source",
+  "loader_imports": [
+    "CFGMGR32.dll",
+    "KERNEL32.dll",
+    "ADVAPI32.dll"
+  ],
+  "editor_imports": [
+    "kernel32.dll",
+    "user32.dll",
+    "gdi32.dll",
+    "ntdll.dll",
+    "shlwapi.dll",
+    "ole32.dll",
+    "shell32.dll",
+    "bcryptprimitives.dll",
+    "api-ms-win-core-synch-l1-2-0.dll",
+    "OPENGL32.dll",
+    "KERNEL32.dll",
+    "USER32.dll",
+    "SHELL32.dll",
+    "GDI32.dll",
+    "ADVAPI32.dll",
+    "imm32.dll",
+    "dwmapi.dll",
+    "uxtheme.dll"
+  ],
+  "static_runtime_GUI_steps": 170,
+  "native_media_binaries_in_public_zip": false,
+  "system_files_or_drivers_changed": false
+}

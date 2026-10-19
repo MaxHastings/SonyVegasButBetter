@@ -5,7 +5,7 @@ Use a C/C++ toolchain for bundled SQLite and the platform's native window librar
 
 ## Windows x64
 
-Install Visual Studio Build Tools with Desktop C++ and a Windows SDK, Rust/MSVC,
+Install CMake and Visual Studio Build Tools with Desktop C++ and a Windows SDK, Rust/MSVC,
 and 7-Zip. Run `powershell -File scripts/bootstrap-runtime.ps1` from this directory.
 It downloads checksum-pinned FFmpeg/ffprobe, FFmpeg shared libraries and libmpv packages, then extracts
 only the selected runtime and notices. It does not install system-wide software.
@@ -68,3 +68,13 @@ corresponding system shared libraries through the dynamic loader. FFmpeg CLI may
 its own compatible installation; preview cannot use an older shared-library ABI.
 Native C++ toolchains are required on all platforms. No FFmpeg headers are needed
 from the host system when building against the vendored header set.
+
+## Windows support loader
+
+The x64 MSVC Cargo target statically links its runtime via .cargo/config.toml;
+the native C++ shim follows that setting. Public packaging builds the app-local
+Vulkan loader with scripts/build-windows-support.ps1 from checksum-pinned loader
+and header archives in runtime-manifest.json. It includes both source archives
+and upstream notices. scripts/check-windows-dependencies.py rejects imports of
+separate Visual C++ runtime DLLs in the executable or loader. CMake is a build
+dependency, not an end-user requirement.

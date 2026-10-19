@@ -72,3 +72,8 @@ upstream notices. It reuses verified interrupted downloads, repairs an incomplet
 runtime, and launches offline once complete. The public ZIP does not redistribute
 the third-party media binaries; the fully bundled local playtest package stays
 separate while its complete native corresponding-source distribution is unresolved.
+
+Clean-PC PE import auditing exposed implicit VC++ and Vulkan-loader dependencies.
+Windows release builds now statically link the compiler runtime and ship a small
+app-local Vulkan loader built from pinned unmodified sources. Source archives and
+notices accompany that loader; it changes no system installation or driver.

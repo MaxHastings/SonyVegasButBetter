@@ -17,7 +17,8 @@ No account, telemetry service or network access is needed for editing.
 4. Edit normally. Later launches work offline; keep the runtime folder beside
    the editor. No administrator access, Rust, or 7-Zip installation is required.
 
-This preview is unsigned. Setup errors stay visible and are recorded in
+The compiler runtime and an app-local Vulkan loader are included; no separate
+Visual C++ or Vulkan installer is required. This preview is unsigned. Setup errors stay visible and are recorded in
 `setup.log`; run the launcher again to retry. See [PLAYTEST.md](PLAYTEST.md) for
 shortcuts, [TESTING.md](TESTING.md) for coverage and [BUILDING.md](BUILDING.md)
 for source builds. macOS/Linux are built in CI; downloadable packages and native

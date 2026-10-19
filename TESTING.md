@@ -11,6 +11,10 @@ device. Windows CI explicitly checks every native test command's exit code.
 
 ## Reproduce
 
+PE import auditing rejects separate Visual C++ runtime dependencies. The app-local
+Vulkan loader ships with its pinned source and notices, covering the transitive
+libmpv dependency on machines without a system Vulkan loader.
+
 Public Windows setup is also checked in 64-bit Windows PowerShell: fresh upstream
 downloads/extraction in a path with spaces, offline repeat startup, retry after an
 interrupted setup, missing-runtime repair, CMD launcher module isolation, GUI launch

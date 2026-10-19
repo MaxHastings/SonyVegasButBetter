@@ -4,6 +4,11 @@ Windows x64 is the only locally executed platform. macOS, Linux/X11 and Wayland
 GUI behavior remains unverified locally. GitHub CI builds and tests all three OSes;
 its actual run status is visible in the public repository.
 
+Hosted runners have no physical audio device. Transport integration tests use
+libmpv's real-time null audio device; separate PCM captures still verify the actual
+decoded mix against exported audio. Native Windows GUI runs use the real output
+device. Windows CI explicitly checks every native test command's exit code.
+
 ## Reproduce
 
 ```

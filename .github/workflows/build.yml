@@ -18,16 +18,20 @@ jobs:
         run: brew install ffmpeg mpv
       - run: cargo fmt --all -- --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
-      - run: cargo test --locked
+      - run: cargo test --release --locked
       - run: cargo build --release --locked
       - if: runner.os == 'Windows'
         shell: pwsh
         run: |
           ./scripts/bootstrap-runtime.ps1
-          cargo test --locked --test media_pipeline -- --ignored --nocapture --test-threads=1
-          cargo test --locked --test media_edges -- --ignored --nocapture --test-threads=1
+          cargo test --release --locked --test media_pipeline -- --ignored --nocapture --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw 'Media pipeline tests failed' }
+          cargo test --release --locked --test media_edges -- --ignored --nocapture --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw 'Media edge tests failed' }
           cargo test --release --locked --test size_limit -- --ignored --nocapture --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw 'Size limit tests failed' }
           cargo test --release --locked --test crop_pipeline -- --ignored --nocapture --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw 'Crop pipeline tests failed' }
           ./scripts/package-windows.ps1
       - if: runner.os != 'Windows'
         run: sh scripts/package-unix.sh

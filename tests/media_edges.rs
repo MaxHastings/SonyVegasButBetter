@@ -87,7 +87,7 @@ fn vfr_non_keyframe_cut_holds_the_covering_frame() {
         pixel[2] > 180,
         "At source .72 the blue frame must show: {pixel:?}"
     );
-    let player = svbb::playback::Player::diagnostic(&rt, &root.join("vfr-preview.log")).unwrap();
+    let player = svbb::playback::Player::headless(&rt).unwrap();
     player.load(
         render::prepare_preview(&rt, &p, &AtomicBool::new(false)).unwrap(),
         0,
@@ -423,7 +423,7 @@ fn preview_crosses_black_gaps_without_stalling_audio() {
     p.media = vec![v, a];
     p.clips = vec![first, second, sound];
     let cancel = AtomicBool::new(false);
-    let player = svbb::playback::Player::new(&rt).unwrap();
+    let player = svbb::playback::Player::headless(&rt).unwrap();
     player.load(render::prepare_preview(&rt, &p, &cancel).unwrap(), 0, false);
     std::thread::sleep(std::time::Duration::from_millis(350));
     player.seek(HZ * 45 / 100);
@@ -476,7 +476,7 @@ fn play_intent_survives_immediate_reload_seek_and_rapid_toggles() {
     p.clips.push(Clip::new(&media, 1, 0));
     p.media.push(media);
     let plan = render::prepare_preview(&rt, &p, &AtomicBool::new(false)).unwrap();
-    let player = svbb::playback::Player::new(&rt).unwrap();
+    let player = svbb::playback::Player::headless(&rt).unwrap();
     for _ in 0..3 {
         player.load(plan.clone(), HZ, false);
         player.pause();

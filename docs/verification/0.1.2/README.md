@@ -19,6 +19,11 @@ and exported pixels for two differently cropped cuts, then resets the retained
 source frame at the same timestamp. The transport regression test issues play
 immediately after reload/seek and checks rapid toggle intent.
 
+Headless CI uses libmpv's real-time null audio device for transport tests; PCM
+captures independently verify the mix. Desktop GUI runs still use the real device.
+Each Windows test command has an explicit exit-code gate, so a later packaging
+success cannot conceal an earlier failed test.
+
 The 0.1.1 complete-session/recovery evidence remains in the adjacent version
 directory. This update reruns the editing QoL stage and adds crop/size coverage;
 it does not claim a new 202-step full-session run. Personal footage and physical

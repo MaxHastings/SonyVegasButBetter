@@ -192,6 +192,11 @@ impl Player {
     pub fn new(rt: &Runtime) -> Result<Self> {
         Self::with_options(rt, vec![])
     }
+    /// A real-time null audio device for deterministic headless adapter tests.
+    /// Desktop playback always uses new(), with the actual system audio device.
+    pub fn headless(rt: &Runtime) -> Result<Self> {
+        Self::with_options(rt, vec![("ao".into(), "null".into())])
+    }
     pub fn diagnostic(rt: &Runtime, log: &std::path::Path) -> Result<Self> {
         Self::with_options(rt, vec![("log-file".into(), log.to_string_lossy().into())])
     }

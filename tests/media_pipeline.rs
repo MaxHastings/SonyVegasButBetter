@@ -194,7 +194,7 @@ fn actual_cut_mix_export_save_reopen_and_preview() {
     let ready = Instant::now();
     let preview = render::prepare_preview(&rt, &p, &cancel).unwrap();
     println!("Preview preparation {:?}", ready.elapsed());
-    let player = Player::new(&rt).unwrap();
+    let player = Player::headless(&rt).unwrap();
     player.load(preview, 0, false);
     let started = Instant::now();
     while !player.snapshot().loaded && started.elapsed() < Duration::from_secs(10) {

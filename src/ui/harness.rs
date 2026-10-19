@@ -16,6 +16,7 @@ enum Target {
     LeftEdge(usize, usize, f64),
     Corner(usize, usize, bool, f64),
     CropPoint(f32, f32),
+    ViewportEdge(usize, bool),
 }
 #[derive(Clone, Debug)]
 enum Step {
@@ -36,6 +37,7 @@ enum Step {
     Finish,
     Crash,
     Capture(&'static str),
+    Measure(&'static str),
 }
 pub(super) struct Harness {
     pub root: PathBuf,
@@ -51,6 +53,7 @@ pub(super) struct Harness {
     baseline: Option<Project>,
     baseline_view: Option<(f32, f32, f32)>,
     last_report: Instant,
+    measurements: Vec<serde_json::Value>,
 }
 fn key(k: Key, m: Modifiers) -> Step {
     Step::Key(k, m)
@@ -68,7 +71,99 @@ impl Harness {
     pub fn new(stage: &str) -> Self {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-output");
         let mut steps = VecDeque::new();
-        if stage == "seek-resize" {
+        if stage == "responsive" {
+            steps.push_back(Step::Drop);
+            steps.push_back(Step::Wait("imported"));
+            for _ in 0..6 {
+                steps.push_back(key(Key::ArrowUp, Modifiers::ALT));
+            }
+            steps.push_back(click("media:gameplay-1.mp4"));
+            steps.push_back(key(Key::Enter, Modifiers::COMMAND));
+            steps.push_back(Step::Measure("first-long-recording-frame"));
+            steps.push_back(click("fit"));
+            for (time, label) in [
+                (120.2, "seek-120"),
+                (480.6, "seek-480"),
+                (30.8, "seek-30"),
+                (120.2, "cached-seek-120"),
+            ] {
+                steps.push_back(Step::Click(Target::Ruler(time)));
+                steps.push_back(Step::Measure(label));
+            }
+            steps.push_back(key(Key::Home, Modifiers::NONE));
+            prop(&mut steps, "Duration (s)", "6");
+            steps.push_back(click("fit"));
+            steps.push_back(Step::Click(Target::ClipAt(0, 3.)));
+            steps.push_back(Step::Assert("split-ready"));
+            steps.push_back(key(Key::S, Modifiers::NONE));
+            steps.push_back(Step::Click(Target::ClipAt(0, 4.)));
+            prop(&mut steps, "Position (s)", "8");
+            steps.push_back(click("fit"));
+            steps.push_back(key(Key::ArrowLeft, Modifiers::ALT));
+            steps.push_back(Step::Assert("previous-cut"));
+            steps.push_back(key(Key::ArrowRight, Modifiers::ALT));
+            steps.push_back(Step::Assert("next-cut"));
+            steps.push_back(Step::RememberView);
+            steps.push_back(key(Key::F, Modifiers::SHIFT));
+            steps.push_back(Step::Assert("selection-fit"));
+            steps.push_back(key(Key::F, Modifiers::NONE));
+            steps.push_back(Step::Assert("view-restored"));
+            steps.push_back(click("fit-selection"));
+            steps.push_back(Step::Remember);
+            steps.push_back(Step::RememberView);
+            steps.push_back(Step::HoldDrag(
+                Target::ClipAt(0, 9.5),
+                Target::ViewportEdge(0, true),
+            ));
+            steps.push_back(Step::Wait("edge-scrolled"));
+            steps.push_back(Step::Assert("edge-move-held"));
+            steps.push_back(Step::Release(Target::ViewportEdge(0, true)));
+            steps.push_back(Step::Assert("edge-move-committed"));
+            steps.push_back(key(Key::Z, Modifiers::COMMAND));
+            steps.push_back(Step::Assert("restored"));
+            steps.push_back(click("fit-selection"));
+            steps.push_back(Step::RememberView);
+            steps.push_back(Step::HoldDrag(
+                Target::Edge(0, 1, 0.),
+                Target::ViewportEdge(0, true),
+            ));
+            steps.push_back(Step::Wait("edge-scrolled"));
+            steps.push_back(Step::Assert("edge-trim-held"));
+            steps.push_back(Step::Release(Target::ViewportEdge(0, true)));
+            steps.push_back(Step::Assert("edge-trim-committed"));
+            steps.push_back(Step::Measure("trim-commit-frame"));
+            steps.push_back(key(Key::Z, Modifiers::COMMAND));
+            steps.push_back(Step::Assert("restored"));
+            steps.push_back(click("fit-selection"));
+            steps.push_back(Step::RememberView);
+            steps.push_back(Step::HoldDrag(
+                Target::ClipAt(0, 9.5),
+                Target::ViewportEdge(0, false),
+            ));
+            steps.push_back(Step::Wait("edge-scrolled-left"));
+            steps.push_back(Step::Release(Target::ViewportEdge(0, false)));
+            steps.push_back(Step::Assert("edge-left-move-committed"));
+            steps.push_back(key(Key::Z, Modifiers::COMMAND));
+            steps.push_back(Step::Assert("restored"));
+            steps.push_back(click("fit-selection"));
+            steps.push_back(Step::RememberView);
+            steps.push_back(Step::HoldDrag(
+                Target::LeftEdge(0, 1, 0.),
+                Target::ViewportEdge(0, false),
+            ));
+            steps.push_back(Step::Wait("edge-scrolled-left"));
+            steps.push_back(Step::Release(Target::ViewportEdge(0, false)));
+            steps.push_back(Step::Assert("edge-left-trim-committed"));
+            steps.push_back(key(Key::Z, Modifiers::COMMAND));
+            steps.push_back(Step::Assert("restored"));
+            steps.push_back(key(Key::Home, Modifiers::NONE));
+            steps.push_back(Step::Measure("undo-restored-frame"));
+            steps.push_back(key(Key::Space, Modifiers::NONE));
+            steps.push_back(Step::Wait("played"));
+            steps.push_back(key(Key::Space, Modifiers::NONE));
+            steps.push_back(Step::Capture("responsive-navigation.png"));
+            steps.push_back(Step::Wait("captured"));
+        } else if stage == "seek-resize" {
             steps.push_back(Step::Drop);
             steps.push_back(Step::Wait("imported"));
             for _ in 0..6 {
@@ -424,6 +519,7 @@ impl Harness {
             baseline: None,
             baseline_view: None,
             last_report: Instant::now(),
+            measurements: vec![],
         }
     }
     fn point(&self, target: &Target, app: &Editor, ctx: &egui::Context) -> Result<Pos2> {
@@ -432,6 +528,18 @@ impl Harness {
                 .with_context(|| format!("Missing GUI widget: {name}"))
         };
         Ok(match target {
+            Target::ViewportEdge(lane, right) => {
+                let viewport = named("timeline-viewport")?;
+                let lane = named(&format!("lane:{lane}"))?;
+                Pos2::new(
+                    if *right {
+                        viewport.right() - 2.
+                    } else {
+                        viewport.left() + 2.
+                    },
+                    lane.center().y,
+                )
+            }
             Target::CropPoint(x, y) => {
                 let r = named("crop-source")?;
                 Pos2::new(r.left() + r.width() * x, r.top() + r.height() * y)
@@ -601,6 +709,20 @@ impl Harness {
         };
         let result = (|| -> Result<bool> {
             match &step {
+                Step::Measure(label) => {
+                    let state = app.player.as_ref().context("Missing player")?.snapshot();
+                    if state.presented_ms.is_none() || app.preview_revision != Some(app.revision) {
+                        anyhow::ensure!(
+                            self.last_step.elapsed() < Duration::from_secs(10),
+                            "No presented frame for {label}"
+                        );
+                        return Ok(false);
+                    }
+                    self.measurements.push(serde_json::json!({"phase":label,"request_id":state.request_id,
+                        "position_seconds":seconds(state.video_position),"first_frame_ms":state.first_frame_ms,
+                        "presented_ms":state.presented_ms,"audio_ready_ms":state.audio_ready_ms,
+                        "cache_hits":state.cache_hits,"cache_bytes":state.cache_bytes,"decoder_opens":state.decoder_opens}));
+                }
                 Step::Drop => {
                     let media = self.root.join("acceptance-media");
                     for file in (1..=3)
@@ -683,6 +805,12 @@ impl Harness {
                         }
                         "played" => app.playhead > HZ * 2,
                         "seek-resize-played" => app.playhead > ticks(8.4),
+                        "edge-scrolled" => {
+                            app.timeline_offset > self.baseline_view.unwrap().1 + 150.
+                        }
+                        "edge-scrolled-left" => {
+                            app.timeline_offset < self.baseline_view.unwrap().1 - 150.
+                        }
                         "saved" => !app.dirty && !app.saving,
                         "rendered" => app.rendered.is_some() && app.render_job.is_none(),
                         "captured" => app.capture_path.is_none(),
@@ -696,6 +824,82 @@ impl Harness {
                     }
                 }
                 Step::Assert(condition) => match *condition {
+                    "previous-cut" => {
+                        anyhow::ensure!(app.playhead == HZ * 3, "Previous cut should skip the gap")
+                    }
+                    "next-cut" => anyhow::ensure!(
+                        app.playhead == HZ * 8,
+                        "Next cut should land on the selected track boundary"
+                    ),
+                    "selection-fit" => {
+                        let clip = app.p.lane(0)[1];
+                        let left = seconds(clip.start) as f32 * app.zoom - app.timeline_offset;
+                        let right = seconds(clip.end()) as f32 * app.zoom - app.timeline_offset;
+                        anyhow::ensure!(
+                            left >= 0.
+                                && right <= app.timeline_width
+                                && app.zoom > self.baseline_view.unwrap().0,
+                            "Selection must be visible and enlarged"
+                        );
+                    }
+                    "edge-move-held" | "edge-trim-held" => {
+                        anyhow::ensure!(
+                            app.p == *self.baseline.as_ref().unwrap(),
+                            "Held drag must not commit edits"
+                        );
+                        if *condition == "edge-trim-held" {
+                            anyhow::ensure!(
+                                app.source_preview,
+                                "Trim must show the moving source boundary"
+                            );
+                        }
+                    }
+                    "edge-move-committed" => {
+                        let old = self.baseline.as_ref().unwrap().lane(0)[1];
+                        let new = app.p.lane(0)[1];
+                        anyhow::ensure!(
+                            new.start > old.start
+                                && new.duration == old.duration
+                                && app.p.lane(1)[1].start == new.start,
+                            "Edge scroll must move linked clips without changing their duration"
+                        );
+                        app.p.validate()?;
+                    }
+                    "edge-left-move-committed" => {
+                        let old = self.baseline.as_ref().unwrap().lane(0)[1];
+                        let new = app.p.lane(0)[1];
+                        anyhow::ensure!(
+                            new.start < old.start
+                                && new.duration == old.duration
+                                && app.p.lane(1)[1].start == new.start,
+                            "Left edge scroll must move linked clips without changing duration"
+                        );
+                        app.p.validate()?;
+                    }
+                    "edge-left-trim-committed" => {
+                        let old = self.baseline.as_ref().unwrap().lane(0)[1];
+                        let new = app.p.lane(0)[1];
+                        anyhow::ensure!(
+                            new.start < old.start
+                                && new.end() == old.end()
+                                && new.source_in < old.source_in
+                                && app.p.lane(1)[1].start == new.start
+                                && app.p.lane(1)[1].duration == new.duration,
+                            "Left edge scroll must extend linked starts with a fixed end"
+                        );
+                        app.p.validate()?;
+                    }
+                    "edge-trim-committed" => {
+                        let old = self.baseline.as_ref().unwrap().lane(0)[1];
+                        let new = app.p.lane(0)[1];
+                        anyhow::ensure!(
+                            new.start == old.start
+                                && new.duration > old.duration
+                                && app.p.lane(1)[1].duration == new.duration,
+                            "Edge scroll must extend linked ends with a fixed start"
+                        );
+                        app.p.validate()?;
+                    }
                     "shortened-playhead" => {
                         anyhow::ensure!(
                             app.p.duration() == HZ * 4,
@@ -724,7 +928,8 @@ impl Harness {
                     "move-gap" => {
                         app.p.validate()?;
                         anyhow::ensure!(
-                            app.p.lane(0)[1].start == 4 * HZ && app.p.lane(1)[1].start == 4 * HZ,
+                            app.p.lane(0).get(1).is_some_and(|c| c.start == 4 * HZ)
+                                && app.p.lane(1).get(1).is_some_and(|c| c.start == 4 * HZ),
                             "Linked drag must move into empty space"
                         );
                     }
@@ -975,7 +1180,7 @@ impl Harness {
                         );
                     }
                     let path = self.root.join(format!("gui-report-{}.json", self.stage));
-                    let report = serde_json::json!({"passed":true,"stage":self.stage,"steps":self.index,"elapsed_seconds":self.started.elapsed().as_secs_f64(),"encoder_used":app.encoder_used,"clips":app.p.clips.len(),"duration_seconds":seconds(app.p.duration()),"verified":"Native eframe window; egui raw pointer/keyboard/drop events; live media adapters; real save and export","events":self.report});
+                    let report = serde_json::json!({"passed":true,"stage":self.stage,"steps":self.index,"elapsed_seconds":self.started.elapsed().as_secs_f64(),"encoder_used":app.encoder_used,"clips":app.p.clips.len(),"duration_seconds":seconds(app.p.duration()),"verified":"Native eframe window; egui raw pointer/keyboard/drop events; live media adapters; real save and export","events":self.report,"measurements":self.measurements});
                     std::fs::write(path, serde_json::to_vec_pretty(&report)?)?;
                     self.done = true;
                     app.allow_close = true;

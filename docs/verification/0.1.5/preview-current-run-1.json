@@ -1,0 +1,48 @@
+{
+  "burst_151_requests_to_correct_frame_ms": 19.8538,
+  "cache_bytes": 33177600,
+  "cache_hits": 4,
+  "decoder_opens": 1,
+  "first_correct_frame_ms": 28.7891,
+  "fixture": "ten-minute 1080p acceptance pattern; six-second source repeated; OS cache not flushed",
+  "passed": true,
+  "play_to_200ms_advance_ms": 208.41199999999998,
+  "probe_ms": 105.90610000000001,
+  "seeks": [
+    {
+      "correct_frame_ms": 79.0944,
+      "seconds": 120.2
+    },
+    {
+      "correct_frame_ms": 75.9624,
+      "seconds": 240.4
+    },
+    {
+      "correct_frame_ms": 42.0238,
+      "seconds": 480.6
+    },
+    {
+      "correct_frame_ms": 39.7026,
+      "seconds": 30.8
+    },
+    {
+      "correct_frame_ms": 2.4968,
+      "seconds": 120.2
+    },
+    {
+      "correct_frame_ms": 2.4695,
+      "seconds": 240.4
+    },
+    {
+      "correct_frame_ms": 2.6222,
+      "seconds": 480.6
+    },
+    {
+      "correct_frame_ms": 2.9155,
+      "seconds": 30.8
+    }
+  ],
+  "source_bytes": 1211112111,
+  "source_seconds": 600.0180629995748,
+  "version": "0.1.5"
+}

@@ -4,13 +4,13 @@ A native, local video editor for cutting gameplay and mixing separate voice
 recordings. Rust owns the edit model; FFmpeg and libmpv provide media processing.
 No account, telemetry service or network access is needed for editing.
 
-**Early Windows preview.** [Download v0.1.4](https://github.com/MaxHastings/SonyVegasButBetter/releases/tag/v0.1.4) · [Changes](CHANGELOG.md) · [Report a bug](https://github.com/MaxHastings/SonyVegasButBetter/issues/new?template=bug_report.yml)
+**Early Windows preview.** [Download v0.1.5](https://github.com/MaxHastings/SonyVegasButBetter/releases/tag/v0.1.5) · [Changes](CHANGELOG.md) · [Report a bug](https://github.com/MaxHastings/SonyVegasButBetter/issues/new?template=bug_report.yml)
 
 ![SVBB timeline with separate linked video/audio and crop preview](docs/verification/0.1.3/timeline-placement.png)
 
 ## Run
 
-1. Download **SVBB-0.1.4-windows-x64-first-run.zip** from the release page.
+1. Download **SVBB-0.1.5-windows-x64-first-run.zip** from the release page.
 2. Extract the entire ZIP to a writable folder, such as Documents\SVBB.
 3. Double-click **Start SVBB.cmd**. First launch downloads and verifies about
    250 MB of media tools from upstream. Windows 10/11 x64 is required.
@@ -65,7 +65,7 @@ Save an SQLite `.svbb` project, reopen it, and render a validated H.264/AAC MP4.
 Video is sequential with no overlapping primary clips. Each audio lane allows
 gaps; dragging against a neighbour stops flush automatically. Use another lane
 for overlapping recordings. Ctrl+wheel zooms at the mouse, wheel pans, + / −
-zoom at the playhead, and F toggles fit / previous view. A visible timeline slider
+zoom at the playhead, and F toggles fit / previous view. Shift+F zooms to the selected clip; Alt+Left/Right jumps to adjacent cuts on the selected track. Holding a move or trim at the viewport edge scrolls the timeline. A visible timeline slider
 also controls zoom. Source audio appears on its own linked clip. Move, split and trim either partner to edit
 both. Unlink in Clip Properties to edit independently.
 
@@ -73,7 +73,7 @@ both. Unlink in Clip Properties to edit independently.
 
 One video lane, three audio lanes, straight cuts, SDR output. No titles, visual
 effects, layering, denoising or plugin hosting. The tested output baseline is
-1080p60; preview displays a 960×540 image decoded on demand from originals.
+1080p60; preview displays a 960×540 image decoded on demand from originals. A 32 MiB frame cache and three warm source decoders speed up revisiting shots. Visual requests bypass audio loading; obsolete requests cannot replace the current preview.
 Long files do not need video or PCM copies before editing. Waveforms fill in while
 indexing runs in the background. Click a clip once to position the playhead, then
 S to split. Drag edges to trim with live source preview; drag top corners to fade.

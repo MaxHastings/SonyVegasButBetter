@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.5 — Responsive preview and timeline navigation
+
+- Send visual seeks directly to a latest-request mailbox, independently of audio
+  loading. Serialize/coalesce audio reloads and retain the latest play intent.
+- Reject obsolete frames, measure first-frame/audio readiness and texture-upload
+  latency, and reuse up to 32 MiB of frames and three source decoders.
+- Reuse original source pixels across timeline edits; crop and fade changes remain
+  correct. Background waveform/thumbnail work yields CPU priority on Windows.
+- Add Alt+Left/Right to jump between cuts on the selected track (video by default),
+  Shift+F / Selection to zoom to a clip, and F to restore the prior view.
+- Auto-scroll left/right while moving or trimming at timeline edges; retain fixed
+  opposite trim edges, linked audio/video and one-step undo.
+- Keep repeated clip clicks at the pointer position instead of jumping to the clip start.
+- Show delayed seek feedback and add measured long-recording/native UI regressions.
+
 ## 0.1.4 — Preview seek fix
 
 - Fix “Seek failed” errors when moving, trimming or deleting clips shortens the

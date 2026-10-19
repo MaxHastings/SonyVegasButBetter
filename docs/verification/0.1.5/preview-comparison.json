@@ -1,0 +1,60 @@
+{
+  "method": "Three interleaved v0.1.4/v0.1.5 runs on the same machine/source; OS cache not flushed. Driver polling and image fingerprint checks included.",
+  "fixture": "ten-minute 1080p acceptance pattern; six-second source repeated; OS cache not flushed",
+  "cases": {
+    "revisited_frame_ms": {
+      "baseline": {
+        "median": 59.23255,
+        "min": 39.540600000000005,
+        "max": 99.1101
+      },
+      "current": {
+        "median": 2.6548000000000003,
+        "min": 2.4695,
+        "max": 2.9855
+      }
+    },
+    "uncached_seek_ms": {
+      "baseline": {
+        "median": 60.26715,
+        "min": 35.6927,
+        "max": 88.5658
+      },
+      "current": {
+        "median": 58.03615,
+        "min": 30.6035,
+        "max": 84.98360000000001
+      }
+    },
+    "first_frame_ms": {
+      "baseline": {
+        "median": 32.473299999999995,
+        "min": 30.1052,
+        "max": 38.707300000000004
+      },
+      "current": {
+        "median": 24.6263,
+        "min": 23.3616,
+        "max": 28.7891
+      }
+    },
+    "burst_final_frame_ms": {
+      "baseline": {
+        "median": 23.8826,
+        "min": 23.307499999999997,
+        "max": 27.0112
+      },
+      "current": {
+        "median": 19.8538,
+        "min": 18.857200000000002,
+        "max": 20.3703
+      }
+    }
+  },
+  "limitations": [
+    "Repeated six-second test pattern; not all real gameplay or codecs.",
+    "First-frame metric starts at adapter request; application startup/probe are separate.",
+    "GUI texture upload does not measure physical monitor presentation.",
+    "Cold initial baseline is deliberately excluded from the comparison."
+  ]
+}

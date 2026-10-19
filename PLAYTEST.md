@@ -32,10 +32,13 @@ destination is preserved. Upload testing against your actual account is manual.
    Ctrl+G opens exact timeline position in seconds. Ctrl+wheel zooms at the mouse;
    ordinary wheel and scrollbars pan. +/− and the Zoom slider change scale around
    the visible playhead. F / Fit fits the edit; press again to restore your view.
+   Shift+F / Selection zooms to the selected clip; F restores the previous view.
+   Alt+Left/Right jumps between cuts on the selected track, or video when no clip is selected.
 4. Click inside a clip, then press S. Linked sound splits with it. Delete leaves a gap; Shift+Delete removes
    that interval and shifts unlocked lanes. Close gaps removes primary gaps.
    Undo/redo with Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y).
 5. Drag edges to trim with live source preview and the opposite edge fixed.
+   Hold a move or trim near either timeline edge to scroll without releasing the mouse.
    Top corners adjust fades. Body drags move linked A/V together and stop flush
    against neighbours. A live outline shows the legal drop; use
    Earlier/Later for neighbor swaps. Numeric Source in, Duration and Position

@@ -8,7 +8,7 @@ use std::{
     ffi::{CStr, CString, c_char, c_void},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc,
     },
     thread,
@@ -161,33 +161,108 @@ impl Api {
 }
 #[derive(Clone, Default)]
 pub struct Snapshot {
+    requested_at: Option<Instant>,
     pub position: Tick,
     pub paused: bool,
     pub loaded: bool,
     pub error: Option<String>,
     pub peak_db: [f64; 2],
     pub frames: u64,
+    pub request_id: u64,
+    pub video_position: Tick,
+    pub first_frame_ms: Option<f64>,
+    pub presented_ms: Option<f64>,
+    pub audio_ready_ms: Option<f64>,
+    pub cache_hits: u64,
+    pub cache_bytes: usize,
+    pub decoder_opens: u64,
 }
+impl Snapshot {
+    pub fn waiting_for_frame(&self) -> bool {
+        self.request_id > 0
+            && self.first_frame_ms.is_none()
+            && self
+                .requested_at
+                .is_some_and(|at| at.elapsed() >= Duration::from_millis(150))
+    }
+}
+#[derive(Clone)]
 pub struct Frame {
     pub pixels: Vec<u8>,
     pub width: usize,
     pub height: usize,
     pub sequence: u64,
+    pub request_id: u64,
+    pub position: Tick,
+    pub source_position: Tick,
+    pub(crate) requested_at: Instant,
+}
+#[derive(Clone, Copy)]
+pub(crate) struct PreviewRequest {
+    pub id: u64,
+    pub at: Tick,
+    pub started: Instant,
 }
 enum Control {
     Command(Vec<String>),
-    Seek(Tick),
-    Source(Media, Tick, Option<CropRect>),
-    Load(PreviewPlan, Tick, bool),
+    Seek(PreviewRequest),
+    Source(Media, PreviewRequest, Option<CropRect>),
+    Load(PreviewPlan, PreviewRequest, bool),
     Stop,
 }
 pub struct Player {
+    latest: Arc<AtomicU64>,
+    visual: crate::video::VideoSender,
+    visual_project: Mutex<Option<Arc<Project>>>,
     log_path: Option<std::path::PathBuf>,
     tx: mpsc::Sender<Control>,
     pub state: Arc<Mutex<Snapshot>>,
     pub frame: Arc<Mutex<Option<Frame>>>,
     stop: Arc<AtomicBool>,
     worker: Option<thread::JoinHandle<()>>,
+}
+fn request_video(
+    video: &crate::video::VideoSender,
+    p: &Project,
+    desired: Tick,
+    request: PreviewRequest,
+) {
+    let at = desired.clamp(0, (p.duration() - p.fps.frame(1)).max(0));
+    let index = (at as i128 * p.fps.num as i128 / (HZ as i128 * p.fps.den as i128)) as i64;
+    let at = p.fps.frame(index);
+    if let Some(c) = p
+        .clips
+        .iter()
+        .find(|c| c.lane == 0 && at >= c.start && at < c.end())
+    {
+        let local = at - c.start;
+        let opacity = if c.mute || p.tracks[0].mute {
+            0.
+        } else {
+            (if c.fade_in > 0 {
+                seconds(local) / seconds(c.fade_in)
+            } else {
+                1.
+            })
+            .min(1.)
+                * (if c.fade_out > 0 {
+                    seconds(c.duration - local) / seconds(c.fade_out)
+                } else {
+                    1.
+                })
+                .min(1.)
+        };
+        video.request_cropped(
+            p.media(&c.media).ok(),
+            c.source_in + local,
+            opacity,
+            c.crop,
+            request,
+            at,
+        );
+    } else {
+        video.request_cropped(None, 0, 1., None, request, at);
+    }
 }
 impl Player {
     pub fn new(rt: &Runtime) -> Result<Self> {
@@ -232,6 +307,8 @@ impl Player {
             ..Default::default()
         }));
         let frame = Arc::new(Mutex::new(None));
+        let latest = Arc::new(AtomicU64::new(0));
+        let worker_latest = latest.clone();
         let stop = Arc::new(AtomicBool::new(false));
         let st = state.clone();
         let fr = frame.clone();
@@ -322,8 +399,13 @@ impl Player {
                 }
                 return;
             }
-            let mut video = crate::video::VideoWorker::new(runtime, fr.clone());
-            let _ = init_tx.send(Ok(()));
+            let video = crate::video::VideoWorker::new(
+                runtime,
+                fr.clone(),
+                worker_latest.clone(),
+                st.clone(),
+            );
+            let _ = init_tx.send(Ok(video.controller.clone()));
             let mut project: Option<Project> = None;
             let mut source_override: Option<(Media, Tick, Option<CropRect>)> = None;
             let mut desired = 0;
@@ -332,12 +414,36 @@ impl Player {
             let mut pending_seek = None;
             let mut should_play = false;
             let mut awaiting_seek: Option<bool> = None;
+            let mut audio_loading = false;
+            let mut audio_started = false;
+            let mut audio_reload_pending = false;
+            let mut active = PreviewRequest {
+                id: 0,
+                at: 0,
+                started: Instant::now(),
+            };
+            let mut logged_frame = 0;
+            let mut logged_audio = 0;
+            let mut logged_presented = 0;
             while !stopping.load(Ordering::Relaxed) {
                 let mut seek = None;
-                for cmd in rx.try_iter() {
+                let controls: Vec<_> = rx.try_iter().collect();
+                let last_load = controls
+                    .iter()
+                    .rposition(|c| matches!(c, Control::Load(..)));
+                for (index, cmd) in controls.into_iter().enumerate() {
+                    if last_load.is_some_and(|last| index < last) {
+                        continue;
+                    }
                     let result = match cmd {
-                        Control::Seek(at) => {
-                            let at = at.clamp(0, project.as_ref().map_or(0, Project::duration));
+                        Control::Seek(request) => {
+                            if request.id != worker_latest.load(Ordering::Relaxed) {
+                                continue;
+                            }
+                            active = request;
+                            let at = request
+                                .at
+                                .clamp(0, project.as_ref().map_or(0, Project::duration));
                             if let Some(log) = &mut log {
                                 log.write(format_args!("Seek to {}s", seconds(at)));
                             }
@@ -346,10 +452,26 @@ impl Player {
                             source_override = None;
                             desired = at;
                             seek = Some(at);
+                            if let Some(p) = &project {
+                                request_video(&video.controller, p, desired, active);
+                            }
                             Ok(())
                         }
-                        Control::Source(media, at, crop) => {
+                        Control::Source(media, request, crop) => {
+                            if request.id != worker_latest.load(Ordering::Relaxed) {
+                                continue;
+                            }
+                            active = request;
+                            let at = request.at;
                             should_play = false;
+                            video.controller.request_cropped(
+                                Some(&media),
+                                at,
+                                1.,
+                                crop,
+                                active,
+                                at,
+                            );
                             source_override = Some((media, at, crop));
                             let _ = api.send(h, &["set".into(), "pause".into(), "yes".into()]);
                             Ok(())
@@ -364,8 +486,15 @@ impl Player {
                                 last_audio = None;
                                 awaiting_seek = None;
                                 pending_seek = None;
+                                audio_reload_pending = false;
                                 seek = None;
-                                video.request(None, 0, 1.);
+                                // The client already invalidated this transport. A
+                                // later source request may now be queued; do not
+                                // label the stop frame with that newer identity.
+                                active.id = 0;
+                                video
+                                    .controller
+                                    .request_cropped(None, 0, 1., None, active, 0);
                                 st.lock().unwrap().loaded = false;
                             }
                             if args.first().is_some_and(|s| s == "cycle")
@@ -407,8 +536,9 @@ impl Player {
                             stopping.store(true, Ordering::Relaxed);
                             Ok(())
                         }
-                        Control::Load(plan, at, play) => {
-                            let at = at.clamp(0, plan.project.duration());
+                        Control::Load(plan, request, play) => {
+                            active = request;
+                            let at = request.at.clamp(0, plan.project.duration());
                             // A seek queued for the previous edit must not overwrite
                             // this load's bounded position after the batch is drained.
                             seek = None;
@@ -427,29 +557,19 @@ impl Player {
                                 s.loaded = false;
                                 s.error = None;
                             }
-                            *factory.project.lock().unwrap() = plan.project.clone();
-                            let filter = format!(
-                                "{},@meter:astats=metadata=1:reset=1:measure_overall=none",
-                                crate::render::master(plan.project.peak_protection)
-                            );
                             project = Some(plan.project);
                             source_override = None;
                             desired = at;
+                            request_video(
+                                &video.controller,
+                                project.as_ref().unwrap(),
+                                desired,
+                                active,
+                            );
                             pending_seek = Some(at);
                             should_play = play;
-                            let _ = api.send(h, &["stop".into()]);
-                            let _ = api.send(h, &["set".into(), "pause".into(), "yes".into()]);
-                            let _ =
-                                api.send(h, &["set".into(), "lavfi-complex".into(), String::new()]);
-                            let _ = api.send(h, &["set".into(), "af".into(), filter]);
-                            api.send(
-                                h,
-                                &[
-                                    "loadfile".into(),
-                                    "svbb://timeline.wav".into(),
-                                    "replace".into(),
-                                ],
-                            )
+                            audio_reload_pending = true;
+                            Ok(())
                         }
                     };
                     if let Err(e) = result
@@ -460,6 +580,39 @@ impl Player {
                         }
                         s.error = Some(e.to_string());
                     }
+                }
+                // Only one audio load may be in flight. New edits replace the
+                // pending snapshot while video already follows the latest edit.
+                // FILE_LOADED has no request ID, so serializing this handshake
+                // prevents an older completion from seeking/resuming a new mix.
+                if audio_reload_pending
+                    && !audio_loading
+                    && let Some(p) = &project
+                {
+                    *factory.project.lock().unwrap() = p.clone();
+                    let filter = format!(
+                        "{},@meter:astats=metadata=1:reset=1:measure_overall=none",
+                        crate::render::master(p.peak_protection)
+                    );
+                    let _ = api.send(h, &["stop".into()]);
+                    let _ = api.send(h, &["set".into(), "pause".into(), "yes".into()]);
+                    let _ = api.send(h, &["set".into(), "lavfi-complex".into(), String::new()]);
+                    let _ = api.send(h, &["set".into(), "af".into(), filter]);
+                    match api.send(
+                        h,
+                        &[
+                            "loadfile".into(),
+                            "svbb://timeline.wav".into(),
+                            "replace".into(),
+                        ],
+                    ) {
+                        Ok(()) => {
+                            audio_loading = true;
+                            audio_started = false;
+                        }
+                        Err(e) => st.lock().unwrap().error = Some(e.to_string()),
+                    }
+                    audio_reload_pending = false;
                 }
                 if let Some(at) = seek {
                     if pending_seek.is_some() {
@@ -475,8 +628,18 @@ impl Player {
                     if e.kind == 0 {
                         break;
                     }
+                    if e.kind == 6 && audio_loading {
+                        audio_started = true;
+                    }
+                    if e.kind == 7 && audio_loading && audio_started {
+                        audio_loading = false;
+                    }
                     if e.kind == 8 {
                         // MPV_EVENT_FILE_LOADED
+                        audio_loading = false;
+                        if audio_reload_pending || project.is_none() {
+                            continue;
+                        }
                         let at = pending_seek.take().unwrap_or(0);
                         if at > 0 {
                             awaiting_seek = Some(false);
@@ -541,7 +704,9 @@ impl Player {
                     }
                     should_play = false;
                 }
-                if let Ok(mut s) = st.lock() {
+                if let Ok(mut s) = st.lock()
+                    && active.id == worker_latest.load(Ordering::Relaxed)
+                {
                     if eof == 0
                         && paused == 0
                         && pending_seek.is_none()
@@ -563,45 +728,54 @@ impl Player {
                     s.position = desired;
                     s.paused = paused != 0;
                     s.peak_db = if paused == 0 { peaks } else { [-120.; 2] };
+                    if source_override.is_none()
+                        && s.loaded
+                        && pending_seek.is_none()
+                        && awaiting_seek.is_none()
+                    {
+                        s.audio_ready_ms
+                            .get_or_insert_with(|| active.started.elapsed().as_secs_f64() * 1000.);
+                    }
+                }
+                // File I/O stays outside the state/output locks used by the UI
+                // and video worker. Audio/UI readiness may arrive after the frame.
+                let metrics = st.lock().unwrap().clone();
+                if metrics.request_id != logged_frame
+                    && let Some(ms) = metrics.first_frame_ms
+                {
+                    if let Some(log) = &mut log {
+                        log.write(format_args!("Preview request {} first frame {:.1}ms; cache hits {}, bytes {}, decoder opens {}", metrics.request_id, ms, metrics.cache_hits, metrics.cache_bytes, metrics.decoder_opens));
+                    }
+                    logged_frame = metrics.request_id;
+                }
+                if metrics.request_id != logged_audio
+                    && let Some(ms) = metrics.audio_ready_ms
+                {
+                    if let Some(log) = &mut log {
+                        log.write(format_args!(
+                            "Preview request {} audio ready {:.1}ms",
+                            metrics.request_id, ms
+                        ));
+                    }
+                    logged_audio = metrics.request_id;
+                }
+                if metrics.request_id != logged_presented
+                    && let Some(ms) = metrics.presented_ms
+                {
+                    if let Some(log) = &mut log {
+                        log.write(format_args!(
+                            "Preview request {} UI texture ready {:.1}ms",
+                            metrics.request_id, ms
+                        ));
+                    }
+                    logged_presented = metrics.request_id;
                 }
                 if let Some((media, at, crop)) = &source_override {
-                    video.request_cropped(Some(media), *at, 1., *crop);
+                    video
+                        .controller
+                        .request_cropped(Some(media), *at, 1., *crop, active, *at);
                 } else if let Some(p) = &project {
-                    let at = desired.clamp(0, (p.duration() - p.fps.frame(1)).max(0));
-                    let frame_index =
-                        (at as i128 * p.fps.num as i128 / (HZ as i128 * p.fps.den as i128)) as i64;
-                    let at = p.fps.frame(frame_index);
-                    if let Some(c) = p
-                        .clips
-                        .iter()
-                        .find(|c| c.lane == 0 && at >= c.start && at < c.end())
-                    {
-                        let local = at - c.start;
-                        let opacity = if c.mute || p.tracks[0].mute {
-                            0.
-                        } else {
-                            (if c.fade_in > 0 {
-                                seconds(local) / seconds(c.fade_in)
-                            } else {
-                                1.
-                            })
-                            .min(1.)
-                                * (if c.fade_out > 0 {
-                                    seconds(c.duration - local) / seconds(c.fade_out)
-                                } else {
-                                    1.
-                                })
-                                .min(1.)
-                        };
-                        video.request_cropped(
-                            p.media(&c.media).ok(),
-                            c.source_in + local,
-                            opacity,
-                            c.crop,
-                        );
-                    } else {
-                        video.request(None, 0, 1.);
-                    }
+                    request_video(&video.controller, p, desired, active);
                 }
                 if let Some(error) = factory.error.lock().unwrap().take() {
                     if let Some(log) = &mut log {
@@ -609,11 +783,11 @@ impl Player {
                     }
                     st.lock().unwrap().error = Some(error);
                 }
-                if let Some(error) = video.error.lock().unwrap().take() {
-                    if let Some(log) = &mut log {
-                        log.write(format_args!("Video: {error}"));
-                    }
-                    st.lock().unwrap().error = Some(error);
+                if let Some((id, error)) = video.error.lock().unwrap().take()
+                    && id == worker_latest.load(Ordering::Relaxed)
+                    && let Some(log) = &mut log
+                {
+                    log.write(format_args!("Video: {error}"));
                 }
                 if let Some(frame) = fr.lock().unwrap().as_ref() {
                     st.lock().unwrap().frames = frame.sequence;
@@ -629,12 +803,18 @@ impl Player {
         let result = init_rx
             .recv_timeout(Duration::from_secs(15))
             .context("Video initialization timed out")?;
-        if let Err(e) = result {
-            stop.store(true, Ordering::Relaxed);
-            let _ = worker.join();
-            anyhow::bail!(e);
-        }
+        let visual = match result {
+            Ok(visual) => visual,
+            Err(e) => {
+                stop.store(true, Ordering::Relaxed);
+                let _ = worker.join();
+                anyhow::bail!(e);
+            }
+        };
         Ok(Self {
+            latest,
+            visual,
+            visual_project: Mutex::new(None),
             log_path,
             tx,
             state,
@@ -643,25 +823,75 @@ impl Player {
             worker: Some(worker),
         })
     }
-    pub fn load(&self, plan: PreviewPlan, at: Tick, play: bool) {
-        let _ = self.tx.send(Control::Load(plan, at, play));
+    fn request(&self, at: Tick) -> PreviewRequest {
+        // Serialize invalidation with publication: a completed old decode cannot
+        // slip back into the output between clearing it and issuing a new seek.
+        let mut output = self.frame.lock().unwrap();
+        let request = PreviewRequest {
+            id: self.latest.fetch_add(1, Ordering::Relaxed) + 1,
+            at,
+            started: Instant::now(),
+        };
+        *output = None;
+        let mut state = self.state.lock().unwrap();
+        state.request_id = request.id;
+        state.position = at;
+        state.paused = true;
+        state.first_frame_ms = None;
+        state.presented_ms = None;
+        state.audio_ready_ms = None;
+        state.error = None;
+        state.requested_at = Some(request.started);
+        request
+    }
+    pub fn load(&self, plan: PreviewPlan, at: Tick, play: bool) -> u64 {
+        let request = self.request(at.clamp(0, plan.project.duration()));
+        self.state.lock().unwrap().loaded = false;
+        request_video(&self.visual, &plan.project, request.at, request);
+        *self.visual_project.lock().unwrap() = Some(Arc::new(plan.project.clone()));
+        let _ = self.tx.send(Control::Load(plan, request, play));
+        request.id
     }
     pub fn log_path(&self) -> Option<&std::path::Path> {
         self.log_path.as_deref()
     }
     pub fn send(&self, args: &[&str]) {
+        if args.first() == Some(&"stop") {
+            self.request(0);
+            let mut state = self.state.lock().unwrap();
+            state.requested_at = None;
+            state.loaded = false;
+            drop(state);
+            *self.visual_project.lock().unwrap() = None;
+        }
         let _ = self.tx.send(Control::Command(
             args.iter().map(|s| s.to_string()).collect(),
         ));
     }
-    pub fn seek(&self, at: Tick) {
-        let _ = self.tx.send(Control::Seek(at));
+    pub fn seek(&self, at: Tick) -> u64 {
+        let request = self.request(at);
+        if let Some(project) = self.visual_project.lock().unwrap().as_ref() {
+            request_video(&self.visual, project, at, request);
+        }
+        let _ = self.tx.send(Control::Seek(request));
+        request.id
     }
     pub fn show_source(&self, media: Media, at: Tick) {
         self.show_source_cropped(media, at, None);
     }
     pub fn show_source_cropped(&self, media: Media, at: Tick, crop: Option<CropRect>) {
-        let _ = self.tx.send(Control::Source(media, at, crop));
+        let request = self.request(at);
+        self.visual
+            .request_cropped(Some(&media), at, 1., crop, request, at);
+        let _ = self.tx.send(Control::Source(media, request, crop));
+    }
+    pub fn frame_presented(&self, frame: &Frame) {
+        let mut state = self.state.lock().unwrap();
+        if state.request_id == frame.request_id {
+            state
+                .presented_ms
+                .get_or_insert_with(|| frame.requested_at.elapsed().as_secs_f64() * 1000.);
+        }
     }
     pub fn pause(&self) {
         self.send(&["set", "pause", "yes"]);

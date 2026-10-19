@@ -69,6 +69,7 @@ struct Drag {
     duration: Tick,
     lane: usize,
     origin: Pos2,
+    scroll_offset: f32,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Action {
@@ -89,6 +90,9 @@ enum Action {
     ZoomIn,
     ZoomOut,
     FitTimeline,
+    FitSelection,
+    PreviousEdit,
+    NextEdit,
     AppendMedia,
     MediaPrevious,
     MediaNext,
@@ -136,6 +140,9 @@ fn bindings() -> Vec<Binding> {
         (Modifiers::NONE, Key::Plus, ZoomIn),
         (Modifiers::NONE, Key::Minus, ZoomOut),
         (Modifiers::NONE, Key::F, FitTimeline),
+        (shift, Key::F, FitSelection),
+        (alt, Key::ArrowLeft, PreviousEdit),
+        (alt, Key::ArrowRight, NextEdit),
         (command, Key::Enter, AppendMedia),
         (alt, Key::ArrowUp, MediaPrevious),
         (alt, Key::ArrowDown, MediaNext),
@@ -397,6 +404,7 @@ impl Editor {
                 "crop-size" => "gui-crop-size.svbb",
                 "placement" => "gui-placement.svbb",
                 "seek-resize" => "gui-seek-resize.svbb",
+                "responsive" => "gui-responsive.svbb",
                 _ => "gui-session.svbb",
             }));
             if stage == "crash-read"
@@ -665,13 +673,17 @@ impl Editor {
         }
     }
     fn seek(&mut self, t: Tick) {
-        self.refresh_crop_preview();
-        self.source_preview = false;
-        self.playhead = self
+        let t = self
             .p
             .fps
             .align(t.clamp(0, self.p.duration()))
             .min(self.p.duration());
+        self.seek_exact(t);
+    }
+    fn seek_exact(&mut self, t: Tick) {
+        self.refresh_crop_preview();
+        self.source_preview = false;
+        self.playhead = t.clamp(0, self.p.duration());
         if let Some(player) = &self.player {
             player.pause();
         }
@@ -1097,6 +1109,7 @@ impl Editor {
                     self.texture =
                         Some(ctx.load_texture("preview", image, egui::TextureOptions::LINEAR));
                 }
+                player.frame_presented(&frame);
             }
         }
         let dropped: Vec<_> = ctx.input(|i| {
@@ -1167,6 +1180,28 @@ impl Editor {
             Action::ZoomIn => self.zoom_timeline(self.zoom * 1.4, None),
             Action::ZoomOut => self.zoom_timeline(self.zoom / 1.4, None),
             Action::FitTimeline => self.fit_timeline(),
+            Action::FitSelection => self.fit_selection(),
+            Action::PreviousEdit | Action::NextEdit => {
+                let lane = self
+                    .selected
+                    .as_ref()
+                    .and_then(|id| self.p.clips.iter().find(|c| &c.id == id))
+                    .map(|c| c.lane)
+                    .or_else(|| self.p.clips.iter().any(|c| c.lane == 0).then_some(0));
+                let points = self
+                    .p
+                    .clips
+                    .iter()
+                    .filter(|c| lane.is_none_or(|lane| c.lane == lane))
+                    .flat_map(|c| [c.start, c.end()])
+                    .chain([0, self.p.duration()]);
+                if let Some(at) =
+                    timeline::edit_point(points, self.playhead, matches!(a, Action::NextEdit))
+                {
+                    self.seek_exact(at);
+                    self.reveal_playhead();
+                }
+            }
             Action::AppendMedia => {
                 if let Some(m) = self
                     .media_selected
@@ -1450,6 +1485,15 @@ mod tests {
     }
     #[test]
     fn ordinary_shortcuts_remain_distinct() {
+        assert_eq!(dispatch(Key::F, Modifiers::SHIFT), [Action::FitSelection]);
+        assert_eq!(
+            dispatch(Key::ArrowRight, Modifiers::ALT),
+            [Action::NextEdit]
+        );
+        assert_eq!(
+            dispatch(Key::ArrowLeft, Modifiers::ALT),
+            [Action::PreviousEdit]
+        );
         assert_eq!(dispatch(Key::Delete, Modifiers::NONE), [Action::Delete]);
         assert_eq!(dispatch(Key::S, Modifiers::NONE), [Action::Split]);
         assert_eq!(dispatch(Key::S, Modifiers::COMMAND), [Action::Save]);

@@ -69,6 +69,9 @@ impl Editor {
                         self.fit_timeline();
                         ui.close_menu();
                     }
+                    if ui.button("Zoom to selected clip     Shift+F").clicked() {
+                        self.fit_selection(); ui.close_menu();
+                    }
                 });
                 if ui.button("Shortcuts / Help").clicked() {
                     self.help = true;
@@ -116,6 +119,10 @@ impl Editor {
                 if fit.clicked() {
                     self.fit_timeline();
                 }
+                let selection = ui.add_enabled(self.selected.is_some(), egui::Button::new("Selection"))
+                    .on_hover_text("Shift+F: zoom to selected clip. F restores the previous view.");
+                trace(ui.ctx(), "fit-selection", &selection);
+                if selection.clicked() { self.fit_selection(); }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
                         .add_enabled(
@@ -389,7 +396,11 @@ impl Editor {
             ui.painter().text(
                 rect.center(),
                 Align2::CENTER_CENTER,
-                "NO TIMELINE MEDIA",
+                if self.p.duration() > 0 {
+                    "Opening preview…"
+                } else {
+                    "NO TIMELINE MEDIA"
+                },
                 FontId::monospace(12.),
                 Color32::from_gray(98),
             );
@@ -398,6 +409,13 @@ impl Editor {
         ui.horizontal(|ui| {
             if ui.button("|◀").on_hover_text("Start [Home]").clicked() {
                 self.seek(0);
+            }
+            let previous_cut = ui
+                .button("|‹")
+                .on_hover_text("Previous cut on selected track [Alt+Left]");
+            trace(ui.ctx(), "previous-cut", &previous_cut);
+            if previous_cut.clicked() {
+                self.action(Action::PreviousEdit);
             }
             if ui
                 .button("◀")
@@ -419,6 +437,13 @@ impl Editor {
             if ui.button("▶").on_hover_text("Next frame [Right]").clicked() {
                 self.action(Action::Right);
             }
+            let next_cut = ui
+                .button("›|")
+                .on_hover_text("Next cut on selected track [Alt+Right]");
+            trace(ui.ctx(), "next-cut", &next_cut);
+            if next_cut.clicked() {
+                self.action(Action::NextEdit);
+            }
             ui.monospace(timecode(self.playhead, self.p.fps));
             if self.source_preview && self.crop_session.is_none() {
                 ui.small("TRIM · source frame");
@@ -431,6 +456,13 @@ impl Editor {
             {
                 ui.spinner();
                 ui.small("Opening sources…");
+            } else if self
+                .player
+                .as_ref()
+                .is_some_and(|p| p.snapshot().waiting_for_frame())
+            {
+                ui.spinner();
+                ui.small("Seeking preview…");
             }
         });
         let mut time = seconds(self.playhead);

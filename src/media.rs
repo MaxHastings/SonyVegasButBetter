@@ -27,6 +27,19 @@ pub fn command(path: &Path) -> Command {
     };
     cmd
 }
+fn background_command(path: &Path) -> Command {
+    let cmd = command(path);
+    #[cfg(windows)]
+    let cmd = {
+        use std::os::windows::process::CommandExt;
+        let mut cmd = cmd;
+        // CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS. Asset indexing
+        // yields CPU time to the interactive decoder and editor.
+        cmd.creation_flags(0x08000000 | 0x00004000);
+        cmd
+    };
+    cmd
+}
 impl Runtime {
     fn asset_cache(&self, m: &Media, kind: &str) -> Result<PathBuf> {
         let modified = fs::metadata(&m.path)?
@@ -232,7 +245,7 @@ impl Runtime {
                 .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
                 .collect());
         }
-        let mut child = command(&self.ffmpeg)
+        let mut child = background_command(&self.ffmpeg)
             .args(["-v", "error", "-nostdin", "-threads", "1", "-i"])
             .arg(&m.path)
             .args([
@@ -305,8 +318,19 @@ impl Runtime {
         if let Ok(bytes) = fs::read(&cache) {
             return Ok(bytes);
         }
-        let out = command(&self.ffmpeg)
-            .args(["-v", "error", "-nostdin", "-ss", "0", "-i"])
+        let out = background_command(&self.ffmpeg)
+            .args([
+                "-v",
+                "error",
+                "-nostdin",
+                "-threads",
+                "1",
+                "-filter_threads",
+                "1",
+                "-ss",
+                "0",
+                "-i",
+            ])
             .arg(&m.path)
             .args([
                 "-frames:v",

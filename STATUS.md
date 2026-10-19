@@ -1,7 +1,9 @@
-# SVBB 0.1.4 — Preview seek repair
+# SVBB 0.1.5 — Responsive preview and navigation
 
 The source repository is public at https://github.com/MaxHastings/SonyVegasButBetter.
-The first Windows preview was v0.1.3; v0.1.4 fixes seeks after shortening edits. The public first-run ZIP contains
+The first Windows preview was v0.1.3; v0.1.4 fixed seeks after shortening edits.
+Version 0.1.5 adds independent visual requests, bounded frame/source reuse, measured
+latency, cut navigation, selection zoom and edge auto-scroll. The public first-run ZIP contains
 the editor and setup scripts; pinned media tools download directly from upstream.
 
 Dragging timeline clips resolves to the nearest available placement, flush with
@@ -27,7 +29,7 @@ preview, reset, Apply and Cancel. Splits inherit crops; each half is independent
 editable. Undo and schema-4 project saves preserve the result. Preview, edge-trim
 feedback and export all use the same source crop.
 
-The long-recording preview bottleneck is removed. Persistent FFmpeg decoders read
+Preview no longer requires processing a whole recording before editing. Exact uncached seeks still depend on codec/keyframe spacing and storage speed. Persistent FFmpeg decoders read
 originals on demand; the audio mix is a bounded virtual float stream rather than
 prepared PCM files. Waveform indexing is progressive and independent of playback.
 
@@ -44,10 +46,10 @@ Windows verification is recorded in TESTING.md and docs/verification/0.1.3 and 0
 exports. Windows, macOS and Linux CI passed for the editor implementation. The
 real-footage playtest gate remains open; macOS/Linux GUI behavior is unverified.
 
-Run artifacts/SVBB-0.1.4-windows-x64-first-run/Start SVBB.cmd.
+Run artifacts/SVBB-0.1.5-windows-x64-first-run/Start SVBB.cmd.
 For the public download, extract the ZIP and run Start SVBB.cmd; first setup needs
 internet, subsequent launches work offline. Old generated builds are removed.
-Projects saved by 0.1.2, 0.1.3 and 0.1.4 use schema 4 and
+Projects saved by 0.1.2 through 0.1.5 use schema 4 and
 are not readable by older executables; migration backups preserve older files.
 
 Scope remains one video lane, three audio lanes, SDR, straight cuts/fades and the

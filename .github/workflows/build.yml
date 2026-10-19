@@ -32,6 +32,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Media pipeline tests failed' }
           cargo test --release --locked --test media_edges -- --ignored --nocapture --test-threads=1
           if ($LASTEXITCODE -ne 0) { throw 'Media edge tests failed' }
+          cargo test --release --locked --test preview_requests -- --ignored --nocapture --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw 'Preview request tests failed' }
           cargo test --release --locked --test size_limit -- --ignored --nocapture --test-threads=1
           if ($LASTEXITCODE -ne 0) { throw 'Size limit tests failed' }
           cargo test --release --locked --test crop_pipeline -- --ignored --nocapture --test-threads=1

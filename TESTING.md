@@ -39,7 +39,38 @@ pointer/keyboard/drop events into the actual native window, targeting rectangles
 observed from the previous UI pass. It uses real controls, commands and workers.
 The distributed release excludes this driver.
 
-## Current 0.1.4 checks
+## Current 0.1.5 checks
+
+33 core/UI/budget checks, 12 real-media tests, a long-recording benchmark and
+317 native GUI steps passed locally. The interleaved warm-cache comparison
+recorded revisited frames at about 2.5–3 ms versus 40–99 ms in 0.1.4; see
+`docs/verification/0.1.5/preview-comparison.json` for all cases and limitations.
+
+`cargo test --release --locked --test preview_requests -- --ignored --nocapture --test-threads=1`
+checks rapid source/crop switches, restoration to the timeline, decoder reuse,
+frame identity, bounded cache memory and audio reloads at different durations/positions.
+Windows CI runs these with the real pinned media runtime.
+
+Generate acceptance media with `scripts/make_acceptance_media.py`, then run:
+
+```
+cargo test --release --locked --test preview_responsiveness -- --ignored --nocapture --test-threads=1
+```
+
+The measured workload opens a ten-minute 1080p source, seeks across it and back,
+issues 151 rapid requests and resumes audio playback. Expected image fingerprints
+and request IDs are checked. `SVBB_BENCH_REPORT` selects a JSON output file.
+The native `SVBB_GUI_TEST=responsive` stage measures real texture uploads while
+exercising cut navigation, selection zoom, moving/trimming with scrolling in both
+directions, linked tracks, undo, playback, save and export.
+
+Comparisons must use the same source and similar cache/load conditions. The acceptance
+file repeats six seconds of test pattern; results do not establish performance for
+all codecs, keyframe spacings, storage devices, real gameplay or physical displays.
+The OS file cache is not flushed. First-frame time starts at an adapter request;
+probe/import time is separate. Reports are in docs/verification/0.1.5.
+
+## Previous 0.1.4 checks
 
 30 core/UI/budget checks and ten real-media tests cover the current editor.
 

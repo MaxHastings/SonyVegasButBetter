@@ -75,6 +75,9 @@ impl Editor {
             let viewport_left = ui.cursor().left();
             self.timeline_width = (ui.available_width() - 16.).max(1.);
             let viewport = Rect::from_min_size(ui.cursor().min, ui.available_size());
+            #[cfg(feature = "gui-test")]
+            ui.ctx().data_mut(|d| d.insert_temp(Id::new(("gui-probe", "timeline-viewport")),
+                Rect::from_min_size(viewport.min, Vec2::new(self.timeline_width, viewport.height()))));
             if ui.rect_contains_pointer(viewport) && self.drag.is_none() {
                 // A smoothed Ctrl-wheel tail must not keep changing scale
                 // after Ctrl is released to pan.
@@ -98,7 +101,21 @@ impl Editor {
                     i.smooth_scroll_delta = Vec2::ZERO;
                 });
             }
+            if self.drag.as_ref().is_some_and(|d| d.edge.abs() < 2)
+                && ui.input(|i| i.pointer.primary_down())
+                && let Some(pointer) = ui.ctx().pointer_latest_pos()
+                && pointer.y >= viewport.top() && pointer.y <= viewport.bottom() {
+                let speed = edge_scroll_speed(pointer.x, viewport_left, viewport_left + self.timeline_width);
+                if speed != 0. {
+                    let dt = ui.input(|i| i.stable_dt).clamp(0., 0.05);
+                    self.timeline_previous_view = None;
+                    self.timeline_pending_offset = Some((self.timeline_offset + speed * dt).clamp(0., seconds(MAX_TIME) as f32 * self.zoom));
+                    ui.ctx().request_repaint();
+                }
+            }
+            let drag_width = if self.drag.is_some() { self.timeline_offset + self.timeline_width * 2. } else { 0. };
             let canvas_width = (seconds(self.p.duration() + HZ * 10) as f32 * self.zoom)
+                .max(drag_width)
                 .max(available - header_w - 22.);
             let mut scroll = egui::ScrollArea::both()
                 .id_salt("timeline-scroll")
@@ -208,7 +225,7 @@ impl Editor {
                         ui.scroll_to_rect(rect, Some(egui::Align::Center));
                         self.scroll_to_clip = None;
                     }
-                    if !rect.intersects(visible) {
+                    if !rect.intersects(visible) && self.drag.as_ref().is_none_or(|d| d.id != c.id) {
                         continue;
                     }
                     let selected = self.selected.as_ref() == Some(&c.id)
@@ -361,10 +378,6 @@ impl Editor {
                             self.seek(ticks(((pos.x - canvas.left()) / self.zoom) as f64));
                         }
                     }
-                    if response.double_clicked() {
-                        self.selected = Some(c.id.clone());
-                        self.seek(c.start);
-                    }
                     if response.hovered() {
                         let pos = ui.ctx().pointer_hover_pos().unwrap_or(rect.center());
                         let mode = hit_mode(rect, handles, pos);
@@ -394,6 +407,7 @@ impl Editor {
                                 duration: c.duration,
                                 lane: c.lane,
                                 origin,
+                                scroll_offset: (viewport_left - canvas.left()).max(0.),
                             });
                             if let Some(player) = &self.player {
                                 player.pause();
@@ -402,8 +416,8 @@ impl Editor {
                     }
                     if let Some(d) = self.drag.clone().filter(|d| d.id == c.id) {
                         if response.dragged() {
-                            let dx =
-                                ui.ctx().pointer_latest_pos().unwrap_or(d.origin).x - d.origin.x;
+                            let dx = ui.ctx().pointer_latest_pos().unwrap_or(d.origin).x - d.origin.x
+                                + (viewport_left - canvas.left()).max(0.) - d.scroll_offset;
                             let raw = ticks(dx as f64 / self.zoom as f64);
                             let mut candidate = self.p.clone();
                             let mut valid_move = true;
@@ -560,7 +574,8 @@ impl Editor {
                         if response.drag_stopped() {
                             drag_commit = Some((
                                 d.clone(),
-                                ui.ctx().pointer_latest_pos().unwrap_or(d.origin) - d.origin,
+                                ui.ctx().pointer_latest_pos().unwrap_or(d.origin) - d.origin
+                                    + Vec2::new((viewport_left - canvas.left()).max(0.) - d.scroll_offset, 0.),
                                 ui.ctx().pointer_latest_pos(),
                                 canvas.left(),
                                 canvas.top(),
@@ -749,6 +764,9 @@ impl Editor {
         }
     }
     pub(super) fn zoom_timeline(&mut self, zoom: f32, pointer: Option<f32>) {
+        if self.drag.is_some() {
+            return;
+        }
         self.timeline_previous_view = None;
         let playhead_x = seconds(self.playhead) as f32 * self.zoom - self.timeline_offset;
         let anchor = pointer.unwrap_or_else(|| {
@@ -764,6 +782,9 @@ impl Editor {
         self.zoom = zoom;
     }
     pub(super) fn fit_timeline(&mut self) {
+        if self.drag.is_some() {
+            return;
+        }
         if let Some((zoom, offset)) = self.timeline_previous_view.take() {
             self.zoom = zoom;
             self.timeline_offset = offset;
@@ -774,6 +795,58 @@ impl Editor {
             self.timeline_offset = 0.;
         }
         self.timeline_pending_offset = Some(self.timeline_offset);
+    }
+    pub(super) fn fit_selection(&mut self) {
+        if self.drag.is_some() {
+            return;
+        }
+        let Some(clip) = self
+            .selected
+            .as_ref()
+            .and_then(|id| self.p.clips.iter().find(|c| &c.id == id))
+        else {
+            self.status = "Select a clip to zoom to it".into();
+            return;
+        };
+        self.timeline_previous_view = Some((self.zoom, self.timeline_offset));
+        self.zoom = ((self.timeline_width - 48.).max(1.)
+            / seconds(clip.duration).max(0.001) as f32)
+            .clamp(0.005, 1000.);
+        self.timeline_offset = (seconds(clip.start) as f32 * self.zoom - 24.).max(0.);
+        self.timeline_pending_offset = Some(self.timeline_offset);
+    }
+    pub(super) fn reveal_playhead(&mut self) {
+        let x = seconds(self.playhead) as f32 * self.zoom;
+        if x < self.timeline_offset + 16. || x > self.timeline_offset + self.timeline_width - 16. {
+            self.timeline_previous_view = None;
+            self.timeline_offset = (x - self.timeline_width / 2.).max(0.);
+            self.timeline_pending_offset = Some(self.timeline_offset);
+        }
+    }
+}
+
+pub(super) fn edit_point(
+    points: impl Iterator<Item = Tick>,
+    at: Tick,
+    forward: bool,
+) -> Option<Tick> {
+    if forward {
+        points.filter(|p| *p > at).min()
+    } else {
+        points.filter(|p| *p < at).max()
+    }
+}
+fn edge_scroll_speed(x: f32, left: f32, right: f32) -> f32 {
+    let zone = 40_f32.min((right - left).max(0.) / 4.);
+    if zone <= 0. {
+        return 0.;
+    }
+    if x < left + zone {
+        -720. * ((left + zone - x) / zone).clamp(0., 1.).powi(2)
+    } else if x > right - zone {
+        720. * ((x - right + zone) / zone).clamp(0., 1.).powi(2)
+    } else {
+        0.
     }
 }
 
@@ -821,6 +894,31 @@ fn hit_mode(rect: Rect, handles: [Pos2; 2], origin: Pos2) -> i8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn edit_navigation_is_strict_and_preserves_off_frame_audio_boundaries() {
+        let boundary = HZ + HZ / 48000;
+        assert_eq!(
+            edit_point([0, boundary, boundary, HZ * 3].into_iter(), HZ, true),
+            Some(boundary)
+        );
+        assert_eq!(
+            edit_point([0, boundary, HZ * 3].into_iter(), boundary, true),
+            Some(HZ * 3)
+        );
+        assert_eq!(
+            edit_point([0, boundary, HZ * 3].into_iter(), boundary, false),
+            Some(0)
+        );
+        assert_eq!(edit_point([0].into_iter(), 0, false), None);
+    }
+    #[test]
+    fn edge_scroll_is_bounded_and_stops_in_the_middle() {
+        assert_eq!(edge_scroll_speed(500., 100., 900.), 0.);
+        assert!(edge_scroll_speed(880., 100., 900.) > 0.);
+        assert!(edge_scroll_speed(120., 100., 900.) < 0.);
+        assert_eq!(edge_scroll_speed(2000., 100., 900.), 720.);
+        assert_eq!(edge_scroll_speed(-2000., 100., 900.), -720.);
+    }
     #[test]
     fn zoom_keeps_time_under_the_pointer_when_scrolled() {
         for (old, new, offset, anchor) in [

@@ -110,3 +110,30 @@ Output is written to a sibling temporary file, decoded/validated and atomically 
 
 Windows is locally tested. Linux/macOS source and packaging paths are maintained but
 have not been run locally. See BUILDING.md and TESTING.md for runtime requirements.
+
+
+## Preview request ownership and responsiveness
+
+Each load, seek or source-boundary preview receives a monotonically increasing
+interaction ID. The client invalidates the old output and submits directly to a
+video mailbox; libmpv loading and synchronous property queries do not gate that
+submission. A bounded latest-only mailbox coalesces requests. Cancellation and
+publication both check identity; output publication and client invalidation use
+the same mutex. Continuous playback can finish nearby frames within one interaction.
+
+The video worker retains three source decoders and an LRU of unfaded 960x540 source
+frames capped at 32 MiB. Keys include source identity/path/size/stream, source time
+and crop. Timeline position, request identity and opacity are applied on reuse;
+changing a fade never changes the cached original pixels. Decoder memory is
+additional to the bitmap cache budget. There is no full-resolution proxy generation.
+
+Audio reloads are serialized: an edit arriving during a load replaces the pending
+project snapshot. The previous FILE_LOADED completion cannot seek/resume the newer
+mix. Seeks and play/pause intent continue to coalesce while loading; the latest
+snapshot opens next. Already-open audio streams own their immutable mix snapshots.
+
+Snapshot diagnostics expose first correct frame, UI texture-upload and audio-ready
+latencies for the current interaction, plus frame-cache size/hits and decoder opens.
+Texture upload is a useful UI timing boundary, not a measurement of physical monitor
+presentation. Local bounded logs record completed request metrics. Windows asset
+processes run below normal priority; thumbnails and waveforms use bounded threading.

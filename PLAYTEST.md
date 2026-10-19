@@ -4,7 +4,7 @@ Extract the Windows portable folder and launch **SonyVegasButBetter.exe**. Keep
 `runtime` beside it. Open directly into an empty workspace. Start with copies of
 recordings you can use for testing, and save a project before a long session.
 
-For the 0.1.2 workflow, crop different timeline sections independently with Preview's
+For the crop workflow, crop different timeline sections independently with Preview's
 Crop tool. Draw, move/resize, switch Free / Match project aspect, preview the result,
 and Apply. Split the event and change just one half; undo and save/reopen to verify
 the two framings. Escape cancels a draft; Reset + Apply clears one clip's crop.
@@ -13,7 +13,9 @@ Render a 30- or 60-second edited timeline with **Fit under a size limit → 10 M
 Leave automatic format adjustment enabled, then check the finished file's displayed
 size and listen to the mix. Audio bitrate should adjust, while mix gain and timing
 stay intact. Try an impractically small limit for a long edit: the app should explain
-the constraint before starting. Cancel during either pass and verify an existing
+the constraint before starting. Auto uses GPU bitrate encoding when available;
+choose CPU for whole-edit two-pass encoding. Both measure the final size and
+retry overruns. Cancel during export and verify an existing
 destination is preserved. Upload testing against your actual account is manual.
 
 1. Import all recordings with Ctrl+I (multi-select) or drop files from Explorer.
@@ -25,13 +27,15 @@ destination is preserved. Upload testing against your actual account is manual.
    audio destination A1/A2/A3 for audio-only files. Alt+Up/Down changes the selected
    media item; Ctrl+Left/Right selects timeline clips.
 3. Click the ruler to seek; Space plays/pauses, Left/Right steps one project frame.
-   Ctrl+G opens exact timeline position in seconds. Fit and +/− adjust zoom;
-   scrollbars pan long timelines. Ctrl+wheel zooms over the timeline.
+   Ctrl+G opens exact timeline position in seconds. Ctrl+wheel zooms at the mouse;
+   ordinary wheel and scrollbars pan. +/− and the Zoom slider change scale around
+   the visible playhead. F / Fit fits the edit; press again to restore your view.
 4. Click inside a clip, then press S. Linked sound splits with it. Delete leaves a gap; Shift+Delete removes
    that interval and shifts unlocked lanes. Close gaps removes primary gaps.
    Undo/redo with Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y).
 5. Drag edges to trim with live source preview and the opposite edge fixed.
-   Top corners adjust fades. Body drags move linked A/V together; use
+   Top corners adjust fades. Body drags move linked A/V together and stop flush
+   against neighbours. A live outline shows the legal drop; use
    Earlier/Later for neighbor swaps. Numeric Source in, Duration and Position
    fields provide precise alternatives. Click a numeric value to type it.
 6. Append microphone clips to A2/A3 and set their Position fields. Set gain/fades

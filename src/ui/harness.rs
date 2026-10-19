@@ -22,6 +22,10 @@ enum Step {
     Drop,
     Click(Target),
     Drag(Target, Target),
+    HoldDrag(Target, Target),
+    Release(Target),
+    Wheel(Target, f32, Modifiers),
+    RememberView,
     Remember,
     Text(String),
     Key(Key, Modifiers),
@@ -45,6 +49,7 @@ pub(super) struct Harness {
     done: bool,
     report: Vec<String>,
     baseline: Option<Project>,
+    baseline_view: Option<(f32, f32, f32)>,
     last_report: Instant,
 }
 fn key(k: Key, m: Modifiers) -> Step {
@@ -63,7 +68,55 @@ impl Harness {
     pub fn new(stage: &str) -> Self {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-output");
         let mut steps = VecDeque::new();
-        if stage == "crop-size" {
+        if stage == "placement" {
+            steps.push_back(Step::Drop);
+            steps.push_back(Step::Wait("imported"));
+            for _ in 0..6 {
+                steps.push_back(key(
+                    Key::ArrowUp,
+                    Modifiers {
+                        alt: true,
+                        ..Modifiers::NONE
+                    },
+                ));
+            }
+            steps.push_back(click("media:gameplay-1.mp4"));
+            steps.push_back(key(Key::Enter, Modifiers::COMMAND));
+            prop(&mut steps, "Duration (s)", "6");
+            steps.push_back(Step::Wait("preview"));
+            steps.push_back(click("fit"));
+            steps.push_back(Step::Click(Target::ClipAt(0, 3.)));
+            steps.push_back(key(Key::S, Modifiers::NONE));
+            steps.push_back(Step::Remember);
+            steps.push_back(Step::Drag(Target::ClipAt(0, 4.), Target::LaneAt(0, 3.6)));
+            steps.push_back(Step::Assert("restored"));
+            // Moving away then dragging into the first clip resolves at its end.
+            steps.push_back(Step::Drag(Target::ClipAt(0, 4.), Target::LaneAt(0, 5.)));
+            steps.push_back(Step::Assert("move-gap"));
+            steps.push_back(Step::HoldDrag(
+                Target::ClipAt(0, 5.),
+                Target::LaneAt(0, 3.5),
+            ));
+            steps.push_back(Step::Assert("drag-preview"));
+            steps.push_back(Step::Capture("timeline-drag-preview.png"));
+            steps.push_back(Step::Wait("captured"));
+            steps.push_back(Step::Release(Target::LaneAt(0, 3.5)));
+            steps.push_back(Step::Assert("restored"));
+            steps.push_back(Step::Capture("timeline-placement.png"));
+            steps.push_back(Step::Wait("captured"));
+            steps.push_back(Step::RememberView);
+            steps.push_back(Step::Wheel(Target::Ruler(3.), 120., Modifiers::CTRL));
+            steps.push_back(Step::Assert("zoom-anchor"));
+            steps.push_back(Step::RememberView);
+            steps.push_back(Step::Wheel(Target::Ruler(3.), -120., Modifiers::NONE));
+            steps.push_back(Step::Assert("wheel-pan"));
+            steps.push_back(Step::RememberView);
+            // Fit/restore returns exactly to our panned view.
+            steps.push_back(key(Key::F, Modifiers::NONE));
+            steps.push_back(key(Key::F, Modifiers::NONE));
+            steps.push_back(Step::Assert("view-restored"));
+            steps.push_back(key(Key::F, Modifiers::NONE));
+        } else if stage == "crop-size" {
             steps.push_back(Step::Drop);
             steps.push_back(Step::Wait("imported"));
             for _ in 0..6 {
@@ -332,6 +385,7 @@ impl Harness {
             done: false,
             report: vec![],
             baseline: None,
+            baseline_view: None,
             last_report: Instant::now(),
         }
     }
@@ -524,7 +578,31 @@ impl Harness {
                 }
                 Step::Click(t) => self.pointer(self.point(t, app, ctx)?),
                 Step::Remember => self.baseline = Some(app.p.clone()),
-                Step::Drag(a, b) => {
+                Step::RememberView => {
+                    self.baseline_view = Some((
+                        app.zoom,
+                        app.timeline_offset,
+                        (app.timeline_offset + 3. * app.zoom) / app.zoom,
+                    ))
+                }
+                Step::Wheel(target, delta, modifiers) => {
+                    let pos = self.point(target, app, ctx)?;
+                    self.events.push_back(egui::Event::PointerMoved(pos));
+                    self.events.push_back(egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: Vec2::new(0., *delta),
+                        modifiers: *modifiers,
+                    });
+                }
+                Step::Release(target) => {
+                    self.events.push_back(egui::Event::PointerButton {
+                        pos: self.point(target, app, ctx)?,
+                        button: egui::PointerButton::Primary,
+                        pressed: false,
+                        modifiers: Modifiers::NONE,
+                    });
+                }
+                Step::Drag(a, b) | Step::HoldDrag(a, b) => {
                     let from = self.point(a, app, ctx)?;
                     let to = self.point(b, app, ctx)?;
                     self.events.push_back(egui::Event::PointerMoved(from));
@@ -539,12 +617,14 @@ impl Harness {
                             from + (to - from) * (n as f32 / 6.),
                         ));
                     }
-                    self.events.push_back(egui::Event::PointerButton {
-                        pos: to,
-                        button: egui::PointerButton::Primary,
-                        pressed: false,
-                        modifiers: Modifiers::NONE,
-                    });
+                    if matches!(step, Step::Drag(..)) {
+                        self.events.push_back(egui::Event::PointerButton {
+                            pos: to,
+                            button: egui::PointerButton::Primary,
+                            pressed: false,
+                            modifiers: Modifiers::NONE,
+                        });
+                    }
                 }
                 Step::Text(s) => self.events.push_back(egui::Event::Text(s.clone())),
                 Step::Key(k, m) => self.keyboard(*k, *m),
@@ -578,6 +658,56 @@ impl Harness {
                     }
                 }
                 Step::Assert(condition) => match *condition {
+                    "drag-preview" => anyhow::ensure!(
+                        app.drag.as_ref().is_some_and(|d| d.edge == 0)
+                            && app.p.lane(0)[1].start == 4 * HZ
+                            && app.p.lane(1)[1].start == 4 * HZ
+                            && app.status.contains("aligned against neighbour"),
+                        "Drag must preview clamped placement before changing the project"
+                    ),
+                    "move-gap" => {
+                        app.p.validate()?;
+                        anyhow::ensure!(
+                            app.p.lane(0)[1].start == 4 * HZ && app.p.lane(1)[1].start == 4 * HZ,
+                            "Linked drag must move into empty space"
+                        );
+                    }
+                    "zoom-anchor" => {
+                        let (zoom, offset, _) = self.baseline_view.unwrap();
+                        let anchor = 3. * zoom - offset;
+                        anyhow::ensure!(
+                            app.zoom > zoom
+                                && ((app.timeline_offset + anchor) / app.zoom - 3.).abs() < 0.02,
+                            "Zoom anchor moved: zoom {} -> {}, offset {} -> {}",
+                            zoom,
+                            app.zoom,
+                            offset,
+                            app.timeline_offset
+                        );
+                    }
+                    "wheel-pan" => {
+                        let (zoom, offset, _) = self.baseline_view.unwrap();
+                        anyhow::ensure!(
+                            app.zoom == zoom && app.timeline_offset > offset + 20.,
+                            "Ordinary wheel must pan without zooming: zoom {} -> {}, offset {} -> {}",
+                            zoom,
+                            app.zoom,
+                            offset,
+                            app.timeline_offset
+                        );
+                    }
+                    "view-restored" => {
+                        let (zoom, offset, _) = self.baseline_view.unwrap();
+                        anyhow::ensure!(
+                            (app.zoom - zoom).abs() < 0.01
+                                && (app.timeline_offset - offset).abs() < 1.,
+                            "Fit must restore prior zoom and scroll: {} -> {}, {} -> {}",
+                            zoom,
+                            app.zoom,
+                            offset,
+                            app.timeline_offset
+                        );
+                    }
                     "split-ready" => anyhow::ensure!(
                         app.selected.is_some() && app.playhead == HZ * 3,
                         "Clip click must select and seek: {:?} / {}",

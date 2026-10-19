@@ -127,6 +127,7 @@ fn real_exports_fit_limits_preserve_audio_and_cancel_safely() {
             c.clamp_fades();
         }
         let mut s = RenderSettings::project(&p);
+        s.encoder = render::Encoder::Software;
         s.max_bytes = Some(limit);
         render::fit_size_format(&mut s, p.duration()).unwrap();
         let dest = dir.path().join(format!("{duration}-{limit}.mp4"));
@@ -219,4 +220,58 @@ fn real_exports_fit_limits_preserve_audio_and_cancel_safely() {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test-output/size-limit-report.json");
     fs::create_dir_all(report.parent().unwrap()).unwrap();
     fs::write(report,serde_json::to_vec_pretty(&serde_json::json!({"exports":measurements,"cancel_preserves_destination":true,"temporary_files_cleaned":true})).unwrap()).unwrap();
+}
+
+#[test]
+#[ignore = "requires the pinned FFmpeg runtime and a supported GPU"]
+fn gpu_size_limited_exports_use_hardware_and_obey_the_same_ceiling() {
+    let (dir, rt, mut p) = fixture();
+    let encoder =
+        render::select_encoder(&rt, render::Encoder::Auto, &AtomicBool::new(false)).unwrap();
+    if encoder == render::Encoder::Software {
+        eprintln!("No supported GPU available; CPU coverage runs separately");
+        return;
+    }
+    let mut measurements = vec![];
+    for (duration, limit) in [(60, 10_000_000), (6, 150_000)] {
+        for c in &mut p.clips {
+            c.duration = HZ * duration;
+            c.clamp_fades();
+        }
+        let mut s = RenderSettings::project(&p);
+        s.encoder = encoder;
+        s.max_bytes = Some(limit);
+        render::fit_size_format(&mut s, p.duration()).unwrap();
+        let dest = dir.path().join(format!("gpu-{duration}.mp4"));
+        let mut used = None;
+        render::export_report(
+            &rt,
+            &p,
+            &s,
+            &dest,
+            &AtomicBool::new(false),
+            |_| {},
+            |event| {
+                if let RenderNotice::Encoder(e) = event {
+                    used = Some(e);
+                }
+            },
+        )
+        .unwrap();
+        assert_eq!(used, Some(encoder));
+        let bytes = fs::metadata(&dest).unwrap().len();
+        assert!(bytes <= limit);
+        let o = command(&rt.ffmpeg)
+            .args(["-v", "error", "-i"])
+            .arg(&dest)
+            .args(["-f", "null", "-"])
+            .output()
+            .unwrap();
+        check(&o, "Decode complete GPU size-limited export").unwrap();
+        measurements.push(serde_json::json!({"encoder":encoder,"duration_s":duration,"limit_bytes":limit,"actual_bytes":bytes,"width":s.width,"height":s.height}));
+    }
+    assert_eq!(fs::read_dir(&rt.cache).unwrap().count(), 0);
+    let report = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("test-output/gpu-size-limit-report.json");
+    fs::write(report, serde_json::to_vec_pretty(&measurements).unwrap()).unwrap();
 }

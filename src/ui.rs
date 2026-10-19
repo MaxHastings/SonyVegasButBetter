@@ -88,6 +88,7 @@ enum Action {
     End,
     ZoomIn,
     ZoomOut,
+    FitTimeline,
     AppendMedia,
     MediaPrevious,
     MediaNext,
@@ -134,6 +135,7 @@ fn bindings() -> Vec<Binding> {
         (Modifiers::NONE, Key::End, End),
         (Modifiers::NONE, Key::Plus, ZoomIn),
         (Modifiers::NONE, Key::Minus, ZoomOut),
+        (Modifiers::NONE, Key::F, FitTimeline),
         (command, Key::Enter, AppendMedia),
         (alt, Key::ArrowUp, MediaPrevious),
         (alt, Key::ArrowDown, MediaNext),
@@ -196,6 +198,10 @@ struct Editor {
     audio_lane: usize,
     playhead: Tick,
     zoom: f32,
+    timeline_offset: f32,
+    timeline_width: f32,
+    timeline_pending_offset: Option<f32>,
+    timeline_previous_view: Option<(f32, f32)>,
     snapping: bool,
     waveform_auto: bool,
     asset_cancel: Arc<AtomicBool>,
@@ -321,6 +327,10 @@ impl Editor {
             audio_lane: 2,
             playhead: 0,
             zoom: 50.,
+            timeline_offset: 0.,
+            timeline_width: 1000.,
+            timeline_pending_offset: None,
+            timeline_previous_view: None,
             snapping: true,
             waveform_auto: true,
             asset_cancel: Arc::new(AtomicBool::new(false)),
@@ -385,6 +395,7 @@ impl Editor {
             app.path = Some(harness.root.join(match stage.to_string_lossy().as_ref() {
                 "qol" => "gui-qol.svbb",
                 "crop-size" => "gui-crop-size.svbb",
+                "placement" => "gui-placement.svbb",
                 _ => "gui-session.svbb",
             }));
             if stage == "crash-read"
@@ -622,6 +633,9 @@ impl Editor {
         self.selected = None;
         self.media_selected = None;
         self.playhead = 0;
+        self.timeline_offset = 0.;
+        self.timeline_pending_offset = Some(0.);
+        self.timeline_previous_view = None;
         self.wave.clear();
         self.thumb.clear();
         self.edited();
@@ -1144,8 +1158,9 @@ impl Editor {
             }
             Action::Home => self.seek(0),
             Action::End => self.seek(self.p.duration()),
-            Action::ZoomIn => self.zoom = (self.zoom * 1.4).min(1000.),
-            Action::ZoomOut => self.zoom = (self.zoom / 1.4).max(0.05),
+            Action::ZoomIn => self.zoom_timeline(self.zoom * 1.4, None),
+            Action::ZoomOut => self.zoom_timeline(self.zoom / 1.4, None),
+            Action::FitTimeline => self.fit_timeline(),
             Action::AppendMedia => {
                 if let Some(m) = self
                     .media_selected

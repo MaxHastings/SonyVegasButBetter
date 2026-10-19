@@ -165,6 +165,7 @@ impl Editor {
                                     ui.selectable_value(&mut self.quality, i, *name);
                                 }
                             });
+                        }
                         egui::ComboBox::from_label("Video encoder")
                             .selected_text(self.encoder.label())
                             .show_ui(ui, |ui| {
@@ -190,9 +191,10 @@ impl Editor {
                                 }
                             });
                         ui.small("Auto tests the GPU encoder and falls back to CPU if needed.");
+                        if !self.render_limit {
                         ui.label("Audio: timeline mix · AAC stereo 48 kHz / 192 kbps");
                         } else {
-                            ui.label("CPU · two-pass H.264 · quality varies to fit the limit");
+                            ui.small("GPU: faster bitrate-based export. CPU: two-pass encoding for compression quality. Quality varies to fit the limit.");
                             ui.small("The finished file is measured. A size overrun triggers a lower-bitrate retry.");
                             match self.render_settings() {
                                 Ok(settings) => {
@@ -285,7 +287,7 @@ impl Editor {
             let mut open = true;
             egui::Window::new("SVBB shortcuts and editing behavior").open(&mut open).default_width(660.).show(ctx,|ui|{
             ui.label("Open → Import → Cut → Arrange → Mix → Render");ui.separator();
-            for line in ["Space: play / pause · Left / Right: one project frame · Home / End: timeline bounds","Click clip then S: position and split linked clips · Delete: delete and leave a gap · Shift+Delete: ripple delete","Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y): undo / redo · Ctrl+S: save · Ctrl+Shift+S: save as","Ctrl+I: import · Ctrl+O: open · + / −: zoom · Ctrl+wheel: zoom over timeline","Double-click media: append. Drag media to a lane: insert. Drag timeline edges: trim.","Linked audio/video move together. Unlink in Clip Properties or the context menu to edit separately.","Ripple delete removes the selected time range on every unlocked lane. Intersecting audio is trimmed/split, never silently left over the removed time. Lock audio lanes to protect their positions.","Edge trims keep the opposite edge fixed and stop at source boundaries or neighbouring clips. Top-corner handles adjust fades.","Audio lanes permit gaps and reject overlaps; use the other lane for overlapping sound.","Match loudness measures the selected source range, targets −16 LUFS, caps boost at +48 dB and predicted true peak at −1 dBTP. Manual gain remains editable.","Splits retain the original outer fades and clear the two new internal fades. Video fades go to black; audio fades change volume. All audio edges have a 3 ms safety ramp.","The default master limiter caps sample peaks at 0.98; AAC may have small reconstructed overshoots.","Save creates a .bak of the previous saved version. Recovery saves run every 15 seconds while dirty."]{ui.label(line);ui.add_space(4.);}
+            for line in ["Space: play / pause · Left / Right: one project frame · Home / End: timeline bounds","Click clip then S: position and split linked clips · Delete: delete and leave a gap · Shift+Delete: ripple delete","Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y): undo / redo · Ctrl+S: save · Ctrl+Shift+S: save as","Ctrl+I: import · Ctrl+O: open · + / −: zoom · Ctrl+wheel: zoom at mouse · wheel: pan · F: fit / restore","Double-click media: append. Drag media to a lane: insert. Drag timeline edges: trim.","Linked audio/video move together. Unlink in Clip Properties or the context menu to edit separately.","Ripple delete removes the selected time range on every unlocked lane. Intersecting audio is trimmed/split, never silently left over the removed time. Lock audio lanes to protect their positions.","Edge trims keep the opposite edge fixed and stop at source boundaries or neighbouring clips. Top-corner handles adjust fades.","Dragging stops flush against neighbours, including linked tracks. Use separate lanes for overlapping sound.","Match loudness measures the selected source range, targets −16 LUFS, caps boost at +48 dB and predicted true peak at −1 dBTP. Manual gain remains editable.","Splits retain the original outer fades and clear the two new internal fades. Video fades go to black; audio fades change volume. All audio edges have a 3 ms safety ramp.","The default master limiter caps sample peaks at 0.98; AAC may have small reconstructed overshoots.","Save creates a .bak of the previous saved version. Recovery saves run every 15 seconds while dirty."]{ui.label(line);ui.add_space(4.);}
         });
             self.help = open;
         }

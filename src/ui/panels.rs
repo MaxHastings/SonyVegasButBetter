@@ -66,9 +66,7 @@ impl Editor {
                         ui.close_menu();
                     }
                     if ui.button("Fit timeline").clicked() {
-                        self.zoom = ((ui.ctx().screen_rect().width() - 230.)
-                            / seconds(self.p.duration()).max(10.) as f32)
-                            .clamp(0.05, 1000.);
+                        self.fit_timeline();
                         ui.close_menu();
                     }
                 });
@@ -113,12 +111,10 @@ impl Editor {
                 if ui.button("+").clicked() {
                     self.action(Action::ZoomIn);
                 }
-                let fit = ui.button("Fit");
+                let fit = ui.button(if self.timeline_previous_view.is_some() { "Restore view" } else { "Fit" }).on_hover_text("F: toggle whole edit / previous view. Ctrl+wheel zooms around the mouse; wheel pans; + / − zoom around the playhead.");
                 trace(ui.ctx(), "fit", &fit);
                 if fit.clicked() {
-                    self.zoom = ((ui.available_width() + 700.)
-                        / seconds(self.p.duration()).max(10.) as f32)
-                        .clamp(0.05, 1000.);
+                    self.fit_timeline();
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui

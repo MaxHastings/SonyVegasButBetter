@@ -28,7 +28,24 @@ pointer/keyboard/drop events into the actual native window, targeting rectangles
 observed from the previous UI pass. It uses real controls, commands and workers.
 The distributed release excludes this driver.
 
-## Current 0.1.2 checks
+## Current 0.1.3 checks
+
+28 core/UI/budget tests include nearest-legal drag placement, exact-fit gaps,
+off-frame audio boundaries, linked-lane obstacles, locked/no-space atomicity,
+undo, both-edge snapping and anchored zoom. A property test compares placement
+against a brute-force nearest legal slot.
+
+The native placement GUI stage tests linked collisions and a held-drag outline
+before commit, Ctrl+wheel anchoring, wheel panning, and Fit/restore. The existing
+QoL and crop-size GUI stages are rerun. The size-goal dialog exposes the encoder
+choice in both modes; the hardware test uses the real NVIDIA encoder at 60 seconds
+under 10 MB and 6 seconds under 150 KB, fully decoding both outputs. GPU coverage
+is conditional on a supported device; hosted CI normally exercises CPU fallback.
+No local hardware result is claimed for Intel, AMD or Apple.
+
+Reports and synthetic screenshots are in docs/verification/0.1.3.
+
+## Previous 0.1.2 checks
 
 22 core/UI tests plus 8 real-media integration tests cover the previous editing
 workflow and the new export/crop features. Size tests encode 30 and 60 seconds

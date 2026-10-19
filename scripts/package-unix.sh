@@ -10,10 +10,10 @@ if [ "$(uname -s)" = Darwin ]; then
     cat > "$dest/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>CFBundleExecutable</key><string>SonyVegasButBetter</string><key>CFBundleIdentifier</key><string>local.svbb.editor</string><key>CFBundleName</key><string>SonyVegasButBetter</string><key>CFBundleVersion</key><string>0.1.2</string><key>NSHighResolutionCapable</key><true/></dict></plist>
+<plist version="1.0"><dict><key>CFBundleExecutable</key><string>SonyVegasButBetter</string><key>CFBundleIdentifier</key><string>local.svbb.editor</string><key>CFBundleName</key><string>SonyVegasButBetter</string><key>CFBundleVersion</key><string>0.1.3</string><key>NSHighResolutionCapable</key><true/></dict></plist>
 PLIST
 else
-    dest=artifacts/SVBB-0.1.2-linux
+    dest=artifacts/SVBB-0.1.3-linux
     mkdir -p "$dest"
     cp target/release/svbb README.md PLAYTEST.md LICENSES.md "$dest/"
 fi

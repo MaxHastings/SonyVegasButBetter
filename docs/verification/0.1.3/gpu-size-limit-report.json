@@ -1,0 +1,18 @@
+[
+  {
+    "actual_bytes": 9974461,
+    "duration_s": 60,
+    "encoder": "Nvidia",
+    "height": 518,
+    "limit_bytes": 10000000,
+    "width": 922
+  },
+  {
+    "actual_bytes": 137599,
+    "duration_s": 6,
+    "encoder": "Nvidia",
+    "height": 240,
+    "limit_bytes": 150000,
+    "width": 426
+  }
+]

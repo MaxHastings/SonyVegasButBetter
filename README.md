@@ -18,8 +18,9 @@ For source builds, see BUILDING.md. PLAYTEST.md describes the editing workflow.
 Edit the timeline first, then choose **Render MP4 → Fit under a size limit**.
 Enter 10 MB or a custom maximum. Video quality and audio bitrate adjust to the
 budget; automatic format adjustment can reduce resolution and frame rate as well.
-The export preserves the edited mix volume and timing. CPU two-pass H.264
-allocates bits across the edit, and the finished MP4 is measured before acceptance.
+The export preserves the edited mix volume and timing. Auto uses GPU bitrate
+encoding when available; CPU two-pass H.264 remains selectable for compression
+quality. The finished MP4 is measured before acceptance.
 An overrun retries at a lower bitrate; failure/cancellation preserves the destination.
 MB is decimal (1,000,000 bytes), including audio and container overhead.
 
@@ -42,7 +43,10 @@ gain; match microphone clips to a measured loudness target, adjust gain and fade
 Save an SQLite `.svbb` project, reopen it, and render a validated H.264/AAC MP4.
 
 Video is sequential with no overlapping primary clips. Each audio lane allows
-gaps but rejects overlaps; use the other lane for overlapping recordings. Source
+gaps; dragging against a neighbour stops flush automatically. Use another lane
+for overlapping recordings. Ctrl+wheel zooms at the mouse, wheel pans, + / −
+zoom at the playhead, and F toggles fit / previous view. A visible timeline slider
+also controls zoom. Source
 audio appears on its own linked clip. Move, split and trim either partner to edit
 both. Unlink in Clip Properties to edit independently.
 

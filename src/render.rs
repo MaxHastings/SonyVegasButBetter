@@ -38,6 +38,39 @@ pub enum Encoder {
     Apple,
 }
 impl Encoder {
+    /// Bitrate control for a whole-file size budget. Quality-based settings
+    /// (CQ/CRF/CQP) deliberately do not appear in this mode.
+    fn bitrate_args(self, bps: u64) -> Vec<String> {
+        let options: &[&str] = match self {
+            Self::Nvidia => &[
+                "-c:v",
+                "h264_nvenc",
+                "-preset",
+                "p5",
+                "-tune",
+                "hq",
+                "-rc",
+                "vbr",
+                "-multipass",
+                "fullres",
+            ],
+            Self::Intel => &["-c:v", "h264_qsv", "-preset", "medium", "-look_ahead", "0"],
+            Self::Amd => &["-c:v", "h264_amf", "-quality", "quality", "-rc", "vbr_peak"],
+            Self::Apple => &["-c:v", "h264_videotoolbox", "-allow_sw", "0"],
+            _ => &["-c:v", "libx264", "-threads", "4", "-preset", "medium"],
+        };
+        let mut args: Vec<String> = options.iter().map(|s| s.to_string()).collect();
+        args.extend(["-b:v".into(), bps.to_string()]);
+        if self != Self::Software {
+            args.extend([
+                "-maxrate".into(),
+                (bps * 2).to_string(),
+                "-bufsize".into(),
+                (bps * 2).to_string(),
+            ]);
+        }
+        args
+    }
     pub fn label(self) -> &'static str {
         match self {
             Self::Auto => "Auto · GPU when available",
@@ -97,6 +130,14 @@ impl Encoder {
 /// A listed encoder may still fail because a device or compatible driver is absent.
 /// Exercise the actual encoder before touching the user's destination.
 pub fn select_encoder(rt: &Runtime, requested: Encoder, cancel: &AtomicBool) -> Result<Encoder> {
+    select_encoder_mode(rt, requested, cancel, None)
+}
+fn select_encoder_mode(
+    rt: &Runtime,
+    requested: Encoder,
+    cancel: &AtomicBool,
+    budget: Option<SizeBudget>,
+) -> Result<Encoder> {
     if requested == Encoder::Software {
         return Ok(requested);
     }
@@ -114,7 +155,7 @@ pub fn select_encoder(rt: &Runtime, requested: Encoder, cancel: &AtomicBool) -> 
             .into_iter()
             .map(str::to_owned)
             .collect();
-        args.extend(encoder.args(1));
+        args.extend(budget.map_or_else(|| encoder.args(1), |b| encoder.bitrate_args(b.video_bps)));
         args.extend(
             ["-pix_fmt", "yuv420p", "-an", "-f", "null", "-"]
                 .into_iter()
@@ -497,11 +538,7 @@ pub fn export_report(
         .transpose()?;
     ensure!(!cancel.load(Ordering::Relaxed), "Cancelled");
     notice(RenderNotice::Stage("Checking encoder"));
-    let encoder = if budget.is_some() {
-        Encoder::Software
-    } else {
-        select_encoder(rt, s.encoder, cancel)?
-    };
+    let mut encoder = select_encoder_mode(rt, s.encoder, cancel, budget)?;
     notice(RenderNotice::Encoder(encoder));
     ensure!(
         !p.media
@@ -555,56 +592,75 @@ pub fn export_report(
         ];
         if let Some(mut budget) = budget {
             let limit = s.max_bytes.unwrap();
-            for attempt in 0..2 {
+            for attempt in 0..3 {
                 if attempt > 0 {
                     notice(RenderNotice::Stage(
                         "Adjusting bitrate to satisfy the size limit",
                     ));
                     progress(0.);
                 }
-                for pass in 1..=2 {
-                    notice(RenderNotice::Stage(if pass == 1 {
-                        "Pass 1 of 2 · analyzing video"
-                    } else {
-                        "Pass 2 of 2 · encoding to the size budget"
-                    }));
-                    let mut pass_args = args.clone();
-                    pass_args.extend([
-                        "-c:v".into(),
-                        "libx264".into(),
-                        "-threads".into(),
-                        "4".into(),
-                        "-preset".into(),
-                        "medium".into(),
-                        "-b:v".into(),
-                        budget.video_bps.to_string(),
-                        "-pass".into(),
-                        pass.to_string(),
-                        "-passlogfile".into(),
-                        work.0.join("analysis").to_string_lossy().into(),
-                    ]);
-                    pass_args.extend(output.clone());
-                    if pass == 1 {
-                        pass_args.extend(["-f".into(), "null".into(), "-".into()]);
-                    } else {
-                        pass_args.extend([
-                            "-movflags".into(),
-                            "+faststart".into(),
-                            part.to_string_lossy().into(),
-                        ]);
+                let passes = if encoder == Encoder::Software { 2 } else { 1 };
+                let encode_result: Result<()> = (|| {
+                    for pass in 1..=passes {
+                        notice(RenderNotice::Stage(if passes == 1 {
+                            "GPU encoding to the size budget"
+                        } else if pass == 1 {
+                            "Pass 1 of 2 · analyzing video"
+                        } else {
+                            "Pass 2 of 2 · encoding to the size budget"
+                        }));
+                        let mut pass_args = args.clone();
+                        pass_args.extend(encoder.bitrate_args(budget.video_bps));
+                        if passes == 2 {
+                            pass_args.extend([
+                                "-pass".into(),
+                                pass.to_string(),
+                                "-passlogfile".into(),
+                                work.0.join("analysis").to_string_lossy().into(),
+                            ]);
+                        }
+                        pass_args.extend(output.clone());
+                        if passes == 2 && pass == 1 {
+                            pass_args.extend(["-f".into(), "null".into(), "-".into()]);
+                        } else {
+                            pass_args.extend([
+                                "-movflags".into(),
+                                "+faststart".into(),
+                                part.to_string_lossy().into(),
+                            ]);
+                        }
+                        let base = if passes == 1 || pass == 1 { 0. } else { 0.4 };
+                        let weight = if passes == 1 {
+                            0.98
+                        } else if pass == 1 {
+                            0.4
+                        } else {
+                            0.58
+                        };
+                        run_progress(rt, &pass_args, p.duration(), cancel, |n| {
+                            progress(base + n * weight)
+                        })?;
                     }
-                    let base = if pass == 1 { 0. } else { 0.4 };
-                    let weight = if pass == 1 { 0.4 } else { 0.58 };
-                    run_progress(rt, &pass_args, p.duration(), cancel, |n| {
-                        progress(base + n * weight)
-                    })?;
+                    Ok(())
+                })();
+                if encode_result.is_err()
+                    && s.encoder == Encoder::Auto
+                    && encoder != Encoder::Software
+                    && !cancel.load(Ordering::Relaxed)
+                    && attempt < 2
+                {
+                    encoder = Encoder::Software;
+                    notice(RenderNotice::Encoder(encoder));
+                    notice(RenderNotice::Stage("GPU encoding failed · retrying on CPU"));
+                    continue;
                 }
+                encode_result?;
                 let bytes = fs::metadata(&part)?.len();
                 if bytes <= limit {
                     break;
                 }
                 ensure!(
-                    attempt == 0,
+                    attempt < 2,
                     "Could not satisfy the size limit. Shorten the edit or increase the limit; the destination has been preserved."
                 );
                 budget.video_bps =

@@ -239,6 +239,15 @@ pub fn trim_edge(p: &mut Project, clip: &str, left: bool, requested: Tick) -> Re
     Ok(edge)
 }
 pub fn move_clip(p: &mut Project, clip: &str, at: Tick, lane: usize) -> Result<()> {
+    let (ids, i) = move_members(p, clip, lane)?;
+    let delta = p.fps.align(at).max(0) - p.clips[i].start;
+    for j in ids {
+        p.clips[j].start += delta;
+    }
+    p.clips[i].lane = lane;
+    Ok(())
+}
+fn move_members(p: &Project, clip: &str, lane: usize) -> Result<(Vec<usize>, usize)> {
     let ids = members(p, clip)?;
     let i = index(p, clip)?;
     ensure!(
@@ -249,12 +258,89 @@ pub fn move_clip(p: &mut Project, clip: &str, at: Tick, lane: usize) -> Result<(
         (p.clips[i].lane == 0) == (lane == 0),
         "Video and audio lanes cannot be interchanged"
     );
-    let delta = p.fps.align(at).max(0) - p.clips[i].start;
+    Ok((ids, i))
+}
+/// Nearest legal position shared by drag feedback and drop. Obstacles on every
+/// linked destination lane constrain the same start time. Touching edges are legal.
+pub fn move_target(p: &Project, clip: &str, requested: Tick, lane: usize) -> Result<Tick> {
+    let (ids, i) = move_members(p, clip, lane)?;
+    let c = &p.clips[i];
+    let high = MAX_TIME - c.duration;
+    let requested = requested.clamp(0, high);
+    let lanes: Vec<_> = ids
+        .iter()
+        .map(|j| if *j == i { lane } else { p.clips[*j].lane })
+        .collect();
+    // An obstacle [a,b) excludes starts strictly inside (a-duration,b).
+    // Merge overlapping open intervals, but retain a shared endpoint: it can
+    // be the one exact-fitting slot between two clips.
+    let mut blocked: Vec<_> = p
+        .clips
+        .iter()
+        .enumerate()
+        .filter(|(j, other)| !ids.contains(j) && lanes.contains(&other.lane))
+        .map(|(_, other)| (other.start - c.duration, other.end()))
+        .collect();
+    blocked.sort_unstable();
+    let mut merged: Vec<(Tick, Tick)> = vec![];
+    for (lo, hi) in blocked {
+        if let Some(last) = merged.last_mut()
+            && lo < last.1
+        {
+            last.1 = last.1.max(hi);
+        } else {
+            merged.push((lo, hi));
+        }
+    }
+    if let Some((lo, hi)) = merged
+        .into_iter()
+        .find(|(lo, hi)| *lo < requested && requested < *hi)
+    {
+        [lo, hi]
+            .into_iter()
+            .filter(|t| *t >= 0 && *t <= high)
+            .min_by_key(|t| ((t - requested).abs(), (t - c.start).abs(), *t))
+            .ok_or_else(|| anyhow::anyhow!("No space for this clip on the destination track"))
+    } else {
+        Ok(requested)
+    }
+}
+pub fn move_clip_clamped(
+    p: &mut Project,
+    clip: &str,
+    requested: Tick,
+    lane: usize,
+) -> Result<Tick> {
+    let at = move_target(p, clip, requested, lane)?;
+    let (ids, i) = move_members(p, clip, lane)?;
+    let delta = at - p.clips[i].start;
     for j in ids {
         p.clips[j].start += delta;
     }
     p.clips[i].lane = lane;
-    Ok(())
+    Ok(at)
+}
+/// Magnetic alignment considers both ends of the moving event and excludes
+/// its linked partner, so its own sound cannot pull it back to the old position.
+pub fn snap_move(
+    p: &Project,
+    clip: &str,
+    at: Tick,
+    tolerance: Tick,
+    playhead: Tick,
+) -> Result<Tick> {
+    let ids = members(p, clip)?;
+    let c = &p.clips[index(p, clip)?];
+    Ok(p.clips
+        .iter()
+        .enumerate()
+        .filter(|(j, _)| !ids.contains(j))
+        .flat_map(|(_, other)| [other.start, other.end()])
+        .chain([0, playhead])
+        .flat_map(|edge| [edge, edge - c.duration])
+        .filter(|t| *t >= 0 && (*t - at).abs() <= tolerance)
+        .min_by_key(|t| ((*t - at).abs(), *t))
+        .unwrap_or(at))
 }
 pub fn reorder(p: &mut Project, clip: &str, direction: i32) -> Result<()> {
     let i = index(p, clip)?;

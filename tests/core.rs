@@ -41,6 +41,110 @@ fn add(p: &mut Project, lane: usize, start: i64, duration: i64) -> String {
     id
 }
 #[test]
+fn drag_stops_flush_on_either_side_and_is_one_undo() {
+    let mut p = project();
+    add(&mut p, 1, 10, 5);
+    let moving = add(&mut p, 1, 0, 3);
+    let original = p.clone();
+    let mut h = History::default();
+    h.apply(&mut p, |p| {
+        edit::move_clip_clamped(p, &moving, 8 * HZ, 1).map(|_| ())
+    })
+    .unwrap();
+    assert_eq!(p.clips[1].end(), 10 * HZ);
+    assert_eq!(p.clips[0], original.clips[0]);
+    assert!(h.undo(&mut p));
+    assert_eq!(p, original);
+    h.apply(&mut p, |p| {
+        edit::move_clip_clamped(p, &moving, 14 * HZ, 1).map(|_| ())
+    })
+    .unwrap();
+    assert_eq!(p.clips[1].start, 15 * HZ);
+    p.validate().unwrap();
+}
+#[test]
+fn drag_preserves_exact_gap_and_off_grid_audio_boundary() {
+    let mut p = project();
+    add(&mut p, 1, 0, 2);
+    add(&mut p, 1, 5, 2);
+    let moving = add(&mut p, 1, 10, 3);
+    assert_eq!(edit::move_target(&p, &moving, 2 * HZ, 1).unwrap(), 2 * HZ);
+    assert_eq!(edit::move_target(&p, &moving, 3 * HZ, 1).unwrap(), 2 * HZ);
+    p.clips[0].duration += 13;
+    p.clips[1].start += 13;
+    let at = edit::move_clip_clamped(&mut p, &moving, HZ, 1).unwrap();
+    assert_eq!(at, 2 * HZ + 13);
+    p.validate().unwrap();
+}
+#[test]
+fn linked_drag_obeys_both_lanes_and_failed_drop_is_atomic() {
+    let mut p = project();
+    p.media[0].duration = 3 * HZ;
+    let moving = edit::append(&mut p, "media", 0, None).unwrap();
+    p.media[0].duration = MAX_TIME;
+    add(&mut p, 0, 10, 3);
+    add(&mut p, 1, 8, 4);
+    assert_eq!(
+        edit::move_clip_clamped(&mut p, &moving, 7 * HZ, 0).unwrap(),
+        5 * HZ
+    );
+    assert_eq!(p.clips[0].start, p.clips[1].start);
+    p.validate().unwrap();
+    let mut h = History::default();
+    p.tracks[1].locked = true;
+    let before = p.clone();
+    assert!(
+        h.apply(&mut p, |p| edit::move_clip_clamped(p, &moving, 0, 0)
+            .map(|_| ()))
+            .is_err()
+    );
+    assert_eq!(p, before);
+    p.tracks[1].locked = false;
+    let audio = p.clips[0].id.clone();
+    edit::unlink(&mut p, &audio).unwrap();
+    add(&mut p, 2, 0, 1);
+    p.clips.last_mut().unwrap().duration = MAX_TIME;
+    let before = p.clone();
+    assert!(
+        h.apply(&mut p, |p| edit::move_clip_clamped(p, &audio, HZ, 2)
+            .map(|_| ()))
+            .is_err()
+    );
+    assert_eq!(p, before);
+}
+#[test]
+fn magnetic_drag_uses_both_ends_and_excludes_linked_partner() {
+    let mut p = project();
+    p.media[0].duration = 3 * HZ;
+    let moving = edit::append(&mut p, "media", 0, None).unwrap();
+    add(&mut p, 0, 10, 3);
+    assert_eq!(
+        edit::snap_move(&p, &moving, 7 * HZ + 100, 200, 20 * HZ).unwrap(),
+        7 * HZ
+    );
+    assert_eq!(
+        edit::snap_move(&p, &moving, 3 * HZ + 100, 200, 20 * HZ).unwrap(),
+        3 * HZ + 100
+    );
+}
+proptest::proptest! {
+    #[test]
+    fn drag_solver_matches_nearest_legal_slot(requested in 0i64..40, duration in 1i64..7) {
+        let mut p = project();
+        add(&mut p, 1, 8, 4);
+        add(&mut p, 1, 18, 5);
+        add(&mut p, 1, 29, 3);
+        let moving = add(&mut p, 2, 40, duration);
+        let at = edit::move_target(&p, &moving, requested * HZ, 1).unwrap();
+        let expected = (0i64..=50).map(|v|v*HZ)
+            .filter(|t|p.lane(1).iter().all(|c|*t+duration*HZ<=c.start || *t>=c.end()))
+            .min_by_key(|t|((t-requested*HZ).abs(),(t-40*HZ).abs(),*t)).unwrap();
+        proptest::prop_assert_eq!(at, expected);
+        edit::move_clip_clamped(&mut p, &moving, at, 1).unwrap();
+        proptest::prop_assert!(p.validate().is_ok());
+    }
+}
+#[test]
 fn split_trim_undo_atomic() {
     let mut p = project();
     let id = add(&mut p, 0, 0, 10);

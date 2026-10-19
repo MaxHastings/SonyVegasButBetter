@@ -1,0 +1,33 @@
+{
+  "cancel_preserves_destination": true,
+  "exports": [
+    {
+      "actual_bytes": 9803579,
+      "audio_bps": 128000,
+      "duration_s": 30,
+      "height": 540,
+      "limit_bytes": 10000000,
+      "mix_rms": 0.04421919599048274,
+      "width": 960
+    },
+    {
+      "actual_bytes": 9677994,
+      "audio_bps": 128000,
+      "duration_s": 60,
+      "height": 518,
+      "limit_bytes": 10000000,
+      "mix_rms": 0.04421919599048274,
+      "width": 922
+    },
+    {
+      "actual_bytes": 148556,
+      "audio_bps": 64000,
+      "duration_s": 6,
+      "height": 240,
+      "limit_bytes": 150000,
+      "mix_rms": 0.044144653258786325,
+      "width": 426
+    }
+  ],
+  "temporary_files_cleaned": true
+}

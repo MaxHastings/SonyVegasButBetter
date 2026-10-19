@@ -1,5 +1,18 @@
 # Decisions
 
+## User-defined upload ceilings and per-event crops (0.1.2)
+Use a byte ceiling as a render goal, with quality as the variable. Generic decimal
+MB limits do not bake a third-party account's changing upload policy into the app.
+Budget AAC as well as video, keep mix gain unchanged, use retained per-job two-pass
+statistics, and measure the completed file. CPU two-pass is chosen for predictable
+bit allocation; GPU quality exports remain a separate existing option.
+
+Store static source-pixel crops on individual video events, not media assets or
+the project. Draw/move/resize in the existing preview, with original context visible
+and one undoable Apply. Match project aspect is the default; Free and result preview
+remain explicit controls. A future animated-reframing feature can extend this model
+without changing the meaning of today's stored static rectangles.
+
 ## Native shell
 Use eframe/egui 0.31, a native Rust window with a custom timeline, no browser engine.
 Qt Widgets would require an additional C++ build and binding layer; Slint's custom

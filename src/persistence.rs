@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const SCHEMA_VERSION: i32 = 3;
+pub const SCHEMA_VERSION: i32 = 4;
 pub fn migrate(conn: &mut Connection) -> Result<()> {
     let version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
     ensure!(
@@ -38,6 +38,9 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
                 SELECT lower(hex(randomblob(16))),media,1,start,source_in,duration,gain_db,mute,fade_in,fade_out,link FROM clips WHERE lane=0 AND link IS NOT NULL;
             UPDATE clips SET gain_db=0,mute=0,fade_in=0,fade_out=0 WHERE lane=0;
             UPDATE tracks SET name='V1 · Video',gain_db=0,mute=0 WHERE lane=0;")?;
+    }
+    if version < 4 {
+        tx.execute_batch("ALTER TABLE clips ADD COLUMN crop TEXT;")?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;
@@ -89,7 +92,7 @@ pub fn save(path: &Path, p: &Project) -> Result<()> {
         }
         for v in &p.clips {
             tx.execute(
-                "INSERT INTO clips VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO clips VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 params![
                     v.id,
                     v.media,
@@ -101,7 +104,8 @@ pub fn save(path: &Path, p: &Project) -> Result<()> {
                     v.mute,
                     v.fade_in,
                     v.fade_out,
-                    v.link
+                    v.link,
+                    v.crop.map(|r| serde_json::to_string(&r)).transpose()?
                 ],
             )?;
         }
@@ -184,7 +188,7 @@ pub fn load(path: &Path) -> Result<Project> {
         seen[i] = true;
     }
     ensure!(seen.into_iter().all(|x| x), "Project is missing tracks");
-    let mut clips = c.prepare("SELECT id,media,lane,start,source_in,duration,gain_db,mute,fade_in,fade_out,link FROM clips ORDER BY rowid")?;
+    let mut clips = c.prepare("SELECT id,media,lane,start,source_in,duration,gain_db,mute,fade_in,fade_out,link,crop FROM clips ORDER BY rowid")?;
     p.clips = clips
         .query_map([], |r| {
             Ok(Clip {
@@ -199,6 +203,18 @@ pub fn load(path: &Path) -> Result<Project> {
                 fade_in: r.get(8)?,
                 fade_out: r.get(9)?,
                 link: r.get(10)?,
+                crop: r
+                    .get::<_, Option<String>>(11)?
+                    .map(|json| {
+                        serde_json::from_str(&json).map_err(|e| {
+                            rusqlite::Error::FromSqlConversionFailure(
+                                11,
+                                rusqlite::types::Type::Text,
+                                Box::new(e),
+                            )
+                        })
+                    })
+                    .transpose()?,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;

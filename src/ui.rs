@@ -22,11 +22,20 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod crop;
 mod dialogs;
 #[cfg(feature = "gui-test")]
 mod harness;
 mod panels;
 mod timeline;
+const RENDER_PRESETS: [&str; 6] = [
+    "Match project",
+    "1080p30",
+    "1080p60",
+    "720p30",
+    "720p60",
+    "480p30",
+];
 fn trace(ctx: &egui::Context, name: impl AsRef<str>, response: &egui::Response) {
     #[cfg(feature = "gui-test")]
     ctx.data_mut(|d| d.insert_temp(Id::new(("gui-probe", name.as_ref())), response.rect));
@@ -47,6 +56,7 @@ enum Event {
     Progress(f32),
     Rendered(PathBuf, Result<()>),
     Encoding(render::Encoder),
+    RenderStage(String),
     Autosaved(Result<()>),
 }
 #[derive(Clone)]
@@ -190,6 +200,7 @@ struct Editor {
     waveform_auto: bool,
     asset_cancel: Arc<AtomicBool>,
     source_preview: bool,
+    crop_session: Option<crop::CropSession>,
     play_when_ready: bool,
     drag: Option<Drag>,
     wave: HashMap<String, Vec<f32>>,
@@ -212,6 +223,10 @@ struct Editor {
     recovery_source: Option<PathBuf>,
     render_dialog: bool,
     render_preset: usize,
+    render_limit: bool,
+    render_limit_mb: f64,
+    render_auto_format: bool,
+    render_stage: String,
     quality: usize,
     render_path: String,
     render_job: Option<Arc<AtomicBool>>,
@@ -310,6 +325,7 @@ impl Editor {
             waveform_auto: true,
             asset_cancel: Arc::new(AtomicBool::new(false)),
             source_preview: false,
+            crop_session: None,
             play_when_ready: false,
             drag: None,
             wave: HashMap::new(),
@@ -332,6 +348,10 @@ impl Editor {
             recovery_source,
             render_dialog: false,
             render_preset: 0,
+            render_limit: false,
+            render_limit_mb: 10.,
+            render_auto_format: true,
+            render_stage: String::new(),
             quality: 1,
             render_path: String::new(),
             render_job: None,
@@ -362,10 +382,10 @@ impl Editor {
             let harness = harness::Harness::new(stage.to_string_lossy().as_ref());
             app.recovery_available = false;
             app.recovery = harness.root.join("gui-recovery.svbb");
-            app.path = Some(harness.root.join(if stage == "qol" {
-                "gui-qol.svbb"
-            } else {
-                "gui-session.svbb"
+            app.path = Some(harness.root.join(match stage.to_string_lossy().as_ref() {
+                "qol" => "gui-qol.svbb",
+                "crop-size" => "gui-crop-size.svbb",
+                _ => "gui-session.svbb",
             }));
             if stage == "crash-read"
                 && let Ok(bytes) = std::fs::read(harness.root.join("gui-report-crash-write.json"))
@@ -581,6 +601,7 @@ impl Editor {
         }
     }
     fn reset(&mut self, p: Project, path: Option<PathBuf>) {
+        self.crop_session = None;
         if let Some(player) = &self.player {
             player.send(&["stop"]);
         }
@@ -628,6 +649,7 @@ impl Editor {
         }
     }
     fn seek(&mut self, t: Tick) {
+        self.refresh_crop_preview();
         self.source_preview = false;
         self.playhead = self.p.fps.align(t.clamp(0, self.p.duration()));
         if let Some(player) = &self.player {
@@ -639,18 +661,22 @@ impl Editor {
             player.seek(self.playhead);
         }
     }
-    fn show_trim_source(&mut self, media: &str, source: Tick) {
+    fn show_trim_source(&mut self, media: &str, source: Tick, crop: Option<CropRect>) {
         if let (Some(player), Ok(m)) = (&self.player, self.p.media(media))
             && m.video.is_some()
         {
-            player.show_source(
+            player.show_source_cropped(
                 m.clone(),
                 source.clamp(0, (m.duration - self.p.fps.frame(1)).max(0)),
+                crop,
             );
             self.source_preview = true;
         }
     }
     fn play(&mut self) {
+        if self.crop_session.is_some() {
+            return;
+        }
         if self.p.duration() == 0 {
             self.play_when_ready = false;
             self.status = "Add media to the timeline to play".into();
@@ -709,20 +735,17 @@ impl Editor {
             });
         }
     }
-    fn start_render(&mut self) {
-        let Some(rt) = self.rt.clone() else {
-            return;
-        };
-        if self.render_job.is_some() {
-            return;
-        }
-        let path = PathBuf::from(&self.render_path);
-        if self.render_path.is_empty() {
-            self.error = Some("Choose an output file".into());
-            return;
-        }
+    fn render_settings(&self) -> Result<RenderSettings> {
         let mut settings = RenderSettings::project(&self.p);
         match self.render_preset {
+            3..=5 => {
+                (settings.width, settings.height) = if self.render_preset == 5 {
+                    (854, 480)
+                } else {
+                    (1280, 720)
+                };
+                settings.fps = Rational::new(if self.render_preset == 4 { 60 } else { 30 }, 1);
+            }
             1 => {
                 settings.width = 1920;
                 settings.height = 1080;
@@ -737,6 +760,42 @@ impl Editor {
         }
         settings.quality = self.quality;
         settings.encoder = self.encoder;
+        if self.render_limit {
+            anyhow::ensure!(
+                self.render_limit_mb.is_finite() && (0.1..=5000.).contains(&self.render_limit_mb),
+                "Enter a size limit between 0.1 and 5,000 MB"
+            );
+            settings.max_bytes = Some((self.render_limit_mb * 1_000_000.).floor() as u64);
+            render::size_budget(settings.max_bytes.unwrap(), self.p.duration())?;
+            if self.render_auto_format {
+                render::fit_size_format(&mut settings, self.p.duration())?;
+            }
+        }
+        Ok(settings)
+    }
+    fn start_render(&mut self) {
+        if self.crop_session.is_some() {
+            self.error = Some("Apply or cancel the crop before rendering".into());
+            return;
+        }
+        let Some(rt) = self.rt.clone() else {
+            return;
+        };
+        if self.render_job.is_some() {
+            return;
+        }
+        let path = PathBuf::from(&self.render_path);
+        if self.render_path.is_empty() {
+            self.error = Some("Choose an output file".into());
+            return;
+        }
+        let settings = match self.render_settings() {
+            Ok(s) => s,
+            Err(e) => {
+                self.error = Some(e.to_string());
+                return;
+            }
+        };
         if let Err(e) = render::plan(&self.p, &settings) {
             self.error = Some(e.to_string());
             return;
@@ -744,6 +803,7 @@ impl Editor {
         self.render_progress = 0.;
         self.render_started = Some(Instant::now());
         self.encoder_used = None;
+        self.render_stage = "Starting export".into();
         self.render_duration = self.p.duration();
         self.rendered = None;
         let cancel = Arc::new(AtomicBool::new(false));
@@ -760,8 +820,12 @@ impl Editor {
                 |n| {
                     let _ = tx.send(Event::Progress(n));
                 },
-                |encoder| {
-                    let _ = tx.send(Event::Encoding(encoder));
+                |notice| {
+                    let event = match notice {
+                        render::RenderNotice::Encoder(encoder) => Event::Encoding(encoder),
+                        render::RenderNotice::Stage(stage) => Event::RenderStage(stage.into()),
+                    };
+                    let _ = tx.send(event);
                 },
             );
             let _ = tx.send(Event::Rendered(path, result));
@@ -854,6 +918,7 @@ impl Editor {
                                     self.play_when_ready = false;
                                 }
                                 self.preview_revision = Some(rev);
+                                self.refresh_crop_preview();
                                 self.status = "Preview ready".into();
                             }
                             Err(e) => {
@@ -949,6 +1014,7 @@ impl Editor {
                     self.render_progress = n;
                 }
                 Event::Encoding(encoder) => self.encoder_used = Some(encoder),
+                Event::RenderStage(stage) => self.render_stage = stage,
                 Event::Rendered(path, result) => {
                     self.render_job = None;
                     match result {
@@ -989,6 +1055,7 @@ impl Editor {
                 let _ = tx.send(Event::Autosaved(persistence::save(&path, &p)));
             });
         }
+        self.update_crop_preview();
         if let Some(player) = &self.player {
             let snap = player.snapshot();
             if !snap.paused && self.preview_revision == Some(self.revision) {
@@ -1190,7 +1257,11 @@ impl eframe::App for Editor {
                 self.confirm_unsaved = true;
             }
         }
-        if !ctx.wants_keyboard_input() && !self.confirm_unsaved && !self.render_dialog {
+        if !ctx.wants_keyboard_input()
+            && !self.confirm_unsaved
+            && !self.render_dialog
+            && self.crop_session.is_none()
+        {
             let actions: Vec<_> = self
                 .shortcuts
                 .iter()

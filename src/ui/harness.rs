@@ -15,6 +15,7 @@ enum Target {
     Edge(usize, usize, f64),
     LeftEdge(usize, usize, f64),
     Corner(usize, usize, bool, f64),
+    CropPoint(f32, f32),
 }
 #[derive(Clone, Debug)]
 enum Step {
@@ -30,6 +31,7 @@ enum Step {
     CloseRender,
     Finish,
     Crash,
+    Capture(&'static str),
 }
 pub(super) struct Harness {
     pub root: PathBuf,
@@ -61,7 +63,74 @@ impl Harness {
     pub fn new(stage: &str) -> Self {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-output");
         let mut steps = VecDeque::new();
-        if stage == "qol" {
+        if stage == "crop-size" {
+            steps.push_back(Step::Drop);
+            steps.push_back(Step::Wait("imported"));
+            for _ in 0..6 {
+                steps.push_back(key(
+                    Key::ArrowUp,
+                    Modifiers {
+                        alt: true,
+                        ..Modifiers::NONE
+                    },
+                ));
+            }
+            steps.push_back(click("media:gameplay-1.mp4"));
+            steps.push_back(key(Key::Enter, Modifiers::COMMAND));
+            prop(&mut steps, "Duration (s)", "6");
+            steps.push_back(Step::Wait("preview"));
+            steps.push_back(click("crop-open"));
+            steps.push_back(Step::Drag(
+                Target::CropPoint(0.15, 0.15),
+                Target::CropPoint(0.75, 0.75),
+            ));
+            steps.push_back(Step::Drag(
+                Target::CropPoint(0.75, 0.75),
+                Target::CropPoint(0.9, 0.85),
+            ));
+            steps.push_back(Step::Capture("crop-tool.png"));
+            steps.push_back(Step::Wait("captured"));
+            steps.push_back(click("crop-preview-result"));
+            steps.push_back(Step::Capture("crop-result.png"));
+            steps.push_back(Step::Wait("captured"));
+            steps.push_back(click("crop-preview-result"));
+            steps.push_back(click("crop-apply"));
+            steps.push_back(Step::Assert("crop-committed"));
+            steps.push_back(key(Key::Z, Modifiers::COMMAND));
+            steps.push_back(Step::Assert("crop-cleared"));
+            steps.push_back(key(Key::Y, Modifiers::COMMAND));
+            steps.push_back(Step::Wait("preview"));
+            steps.push_back(click("fit"));
+            steps.push_back(Step::Click(Target::ClipAt(0, 3.)));
+            steps.push_back(Step::Assert("split-ready"));
+            steps.push_back(key(Key::S, Modifiers::NONE));
+            steps.push_back(Step::Assert("crop-inherited"));
+            steps.push_back(Step::Click(Target::Clip(0, 1)));
+            steps.push_back(click("crop-open"));
+            steps.push_back(click("crop-free"));
+            steps.push_back(Step::Drag(
+                Target::CropPoint(0.05, 0.05),
+                Target::CropPoint(0.4, 0.6),
+            ));
+            steps.push_back(Step::Drag(
+                Target::CropPoint(0.2, 0.3),
+                Target::CropPoint(0.3, 0.4),
+            ));
+            steps.push_back(click("crop-aspect"));
+            steps.push_back(click("crop-apply"));
+            steps.push_back(Step::Assert("crop-independent"));
+            steps.push_back(click("crop-open"));
+            steps.push_back(click("crop-reset"));
+            steps.push_back(click("crop-cancel"));
+            steps.push_back(Step::Assert("crop-independent"));
+            steps.push_back(click("crop-open"));
+            steps.push_back(click("crop-reset"));
+            steps.push_back(click("crop-apply"));
+            steps.push_back(Step::Assert("crop-reset-independent"));
+            steps.push_back(key(Key::Z, Modifiers::COMMAND));
+            steps.push_back(Step::Assert("crop-independent"));
+            steps.push_back(Step::Remember);
+        } else if stage == "qol" {
             steps.push_back(Step::Drop);
             steps.push_back(Step::Wait("imported"));
             for _ in 0..6 {
@@ -235,9 +304,19 @@ impl Harness {
             steps.push_back(key(Key::S, Modifiers::COMMAND));
             steps.push_back(Step::Wait("saved"));
             steps.push_back(key(Key::R, Modifiers::COMMAND));
+            if stage == "crop-size" {
+                steps.push_back(click("size-limit"));
+                prop(&mut steps, "size-limit-mb", "0.2");
+                steps.push_back(Step::Assert("size-settings"));
+                steps.push_back(Step::Capture("size-limit-settings.png"));
+                steps.push_back(Step::Wait("captured"));
+            }
             steps.push_back(Step::RenderPath);
             steps.push_back(click("render"));
             steps.push_back(Step::Wait("rendered"));
+            if stage == "crop-size" {
+                steps.push_back(Step::Assert("limited-output"));
+            }
             steps.push_back(Step::CloseRender);
             steps.push_back(Step::Finish);
         }
@@ -262,6 +341,10 @@ impl Harness {
                 .with_context(|| format!("Missing GUI widget: {name}"))
         };
         Ok(match target {
+            Target::CropPoint(x, y) => {
+                let r = named("crop-source")?;
+                Pos2::new(r.left() + r.width() * x, r.top() + r.height() * y)
+            }
             Target::Named(name) => named(name)?.center(),
             Target::LeftEdge(lane, index, delta) | Target::Corner(lane, index, true, delta) => {
                 let c = app
@@ -484,6 +567,7 @@ impl Harness {
                         "played" => app.playhead > HZ * 2,
                         "saved" => !app.dirty && !app.saving,
                         "rendered" => app.rendered.is_some() && app.render_job.is_none(),
+                        "captured" => app.capture_path.is_none(),
                         _ => false,
                     };
                     if !ok {
@@ -494,6 +578,61 @@ impl Harness {
                     }
                 }
                 Step::Assert(condition) => match *condition {
+                    "split-ready" => anyhow::ensure!(
+                        app.selected.is_some() && app.playhead == HZ * 3,
+                        "Clip click must select and seek: {:?} / {}",
+                        app.selected,
+                        seconds(app.playhead)
+                    ),
+                    "crop-committed" => anyhow::ensure!(
+                        app.p.lane(0)[0]
+                            .crop
+                            .is_some_and(|r| r.width > 1200 && r.height > 700),
+                        "Drag must commit a clip crop"
+                    ),
+                    "crop-cleared" => {
+                        anyhow::ensure!(app.p.lane(0)[0].crop.is_none(), "Undo must clear the crop")
+                    }
+                    "crop-inherited" => anyhow::ensure!(
+                        app.p.lane(0).len() == 2
+                            && app.p.lane(0)[0].crop.is_some()
+                            && app.p.lane(0)[0].crop == app.p.lane(0)[1].crop,
+                        "A split must inherit the original crop"
+                    ),
+                    "crop-independent" => anyhow::ensure!(
+                        app.p.lane(0)[0].crop.is_some()
+                            && app.p.lane(0)[1].crop.is_some()
+                            && app.p.lane(0)[0].crop != app.p.lane(0)[1].crop
+                            && app.p.lane(1).iter().all(|c| c.crop.is_none()),
+                        "Editing a crop must only change one video event"
+                    ),
+                    "crop-reset-independent" => anyhow::ensure!(
+                        app.p.lane(0)[0].crop.is_some() && app.p.lane(0)[1].crop.is_none(),
+                        "Reset must only clear the selected crop"
+                    ),
+                    "size-settings" => {
+                        let s = app.render_settings()?;
+                        anyhow::ensure!(
+                            s.max_bytes == Some(200_000)
+                                && s.width < 1920
+                                && render::size_budget(200_000, app.p.duration())?.audio_bps
+                                    < 192_000,
+                            "Size goal must reduce video format and audio bitrate"
+                        );
+                    }
+                    "limited-output" => {
+                        anyhow::ensure!(
+                            std::fs::metadata(app.rendered.as_ref().context("No render")?)?.len()
+                                <= 200_000,
+                            "Final file must fit under the limit"
+                        );
+                        anyhow::ensure!(
+                            Some(&app.p) == self.baseline.as_ref(),
+                            "Export must not change the edit or crops"
+                        );
+                        let saved = persistence::load(app.path.as_ref().context("No project")?)?;
+                        anyhow::ensure!(saved == app.p, "Per-clip crops must survive save/reopen");
+                    }
                     "linked-loudness" => anyhow::ensure!(
                         app.p.lane(0)[0].gain_db == 0. && app.p.lane(1)[0].gain_db.abs() > 0.1,
                         "Loudness shortcut on video must adjust its linked audio"
@@ -669,6 +808,10 @@ impl Harness {
                         serde_json::to_vec_pretty(&report)?,
                     )?;
                     std::process::exit(86);
+                }
+                Step::Capture(name) => {
+                    app.capture_path = Some(self.root.join(name));
+                    app.capture_requested = false;
                 }
             }
             Ok(true)

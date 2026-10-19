@@ -5,13 +5,37 @@ adapters consume that data. FFmpeg, SQLite and egui types never enter the projec
 
 * `model`: integer time, media metadata, four tracks, clips and explicit A/V links.
 * `edit`: copy/validate/commit commands, linked operations and bounded undo/redo.
-* `persistence`: SQLite schema 3, explicit migrations and atomic replacement saves.
+* `persistence`: SQLite schema 4, explicit migrations and atomic replacement saves.
 * `media`: source probes, progressive waveform/thumbnail indexing and loudness jobs.
 * `video` and `native/video.cpp`: persistent FFmpeg decoding and RGBA conversion.
 * `audio`: seekable, on-demand stereo float timeline mixing on mpv's demux thread.
 * `playback`: narrow libmpv ABI, device output, buffering, limiter and output meter.
 * `render`: offline FFmpeg graph planning, encoder probing, cancellation and validation.
-* `ui`: native eframe panels, direct timeline manipulation and raw-input GUI tests.
+* `ui`: native eframe panels, direct timeline/crop manipulation and raw-input GUI tests.
+
+## Crops and bounded-size export
+
+A clip's optional source-pixel crop is independent of its linked sound. The crop
+tool edits a draft over the original frame and commits once, so pointer motion does
+not flood undo history or change the saved model. Split copies the crop to each
+new event. Preview uses a non-owning AVFrame view with av_frame_apply_cropping,
+then scales at source resolution; the retained decoder frame is never modified.
+Export applies the same source rectangle before fitting/letterboxing the output.
+
+An optional byte ceiling is an export constraint, separate from the project format.
+The budget reserves container overhead and AAC priming, selects AAC 64/96/128/192
+kbps, and assigns remaining bits to H.264. Optional format fitting reduces frame
+rate to 30 when needed and scales the canvas while preserving its aspect ratio.
+The 240p floor avoids silently shrinking to an unreadable thumbnail; very low
+budgets are warned about or rejected before rendering.
+
+Bounded-size exports use CPU x264 two-pass encoding. Each job owns its graph and
+pass logs in a unique cache subdirectory, retained across both passes and removed
+on success/failure/cancellation. Progress is weighted across analysis and encoding.
+An oversized result retries once with a lower video bitrate. Actual file size is
+checked again during validation before atomic destination replacement. A successful
+export therefore fits its ceiling; a failed job does not publish an oversized file.
+Ordinary quality-driven exports retain hardware encoding and CPU fallback.
 
 ## Time and source decoding
 

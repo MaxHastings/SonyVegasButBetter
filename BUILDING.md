@@ -24,7 +24,7 @@ Do not rebuild an executable while that same build is running: Windows locks it.
 Use the release test/build profile while a debug GUI session is active.
 
 The native output is `target/release/svbb.exe`. Packaging copies and renames it to
-`artifacts/SVBB-0.1.1-windows-x64/SonyVegasButBetter.exe`, with an adjacent runtime,
+`artifacts/SVBB-0.1.2-windows-x64/SonyVegasButBetter.exe`, with an adjacent runtime,
 documentation, source snapshot, dependency notices and license text.
 
 ## Linux

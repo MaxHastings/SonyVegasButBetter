@@ -85,6 +85,45 @@ pub struct Clip {
     pub fade_out: Tick,
     #[serde(default)]
     pub link: Option<String>,
+    #[serde(default)]
+    pub crop: Option<CropRect>,
+}
+/// A static source-pixel rectangle on one video event. Audio partners have none.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CropRect {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+impl CropRect {
+    pub fn full(width: u32, height: u32) -> Self {
+        Self {
+            x: 0,
+            y: 0,
+            width,
+            height,
+        }
+    }
+    pub fn validate(self, width: u32, height: u32) -> Result<()> {
+        ensure!(
+            self.width >= 2
+                && self.height >= 2
+                && self.width <= width
+                && self.height <= height
+                && self.x <= width - self.width
+                && self.y <= height - self.height,
+            "Crop rectangle exceeds source boundaries"
+        );
+        ensure!(
+            self.x.is_multiple_of(2)
+                && self.y.is_multiple_of(2)
+                && self.width.is_multiple_of(2)
+                && self.height.is_multiple_of(2),
+            "Crop coordinates and dimensions must be even pixels"
+        );
+        Ok(())
+    }
 }
 impl Clip {
     pub fn end(&self) -> Tick {
@@ -103,6 +142,7 @@ impl Clip {
             fade_in: 0,
             fade_out: 0,
             link: None,
+            crop: None,
         }
     }
     pub fn clamp_fades(&mut self) {
@@ -227,6 +267,10 @@ impl Project {
                 "Audio-only media belongs on an audio lane"
             );
             ensure!(c.lane == 0 || m.audio.is_some(), "Media has no audio");
+            if let Some(crop) = c.crop {
+                ensure!(c.lane == 0, "Only video clips can have a crop");
+                crop.validate(m.width, m.height)?;
+            }
             ensure!(
                 c.gain_db.is_finite() && (-60.0..=60.0).contains(&c.gain_db),
                 "Invalid clip gain"

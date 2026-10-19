@@ -219,7 +219,7 @@ fn schema_migration_fixture() {
     let version: i32 = c
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 3);
+    assert_eq!(version, persistence::SCHEMA_VERSION);
     let count: i64 = c
         .query_row(
             "SELECT COUNT(*) FROM pragma_table_info('clips') WHERE name IN ('fade_in','fade_out')",
@@ -243,7 +243,7 @@ fn populated_old_project_migrates_without_losing_edits() {
     p.tracks[1].gain_db = -3.;
     persistence::save(&file, &p).unwrap();
     let conn = rusqlite::Connection::open(&file).unwrap();
-    conn.execute_batch("ALTER TABLE clips DROP COLUMN link; ALTER TABLE clips DROP COLUMN fade_in; ALTER TABLE clips DROP COLUMN fade_out; DELETE FROM tracks WHERE lane=3; PRAGMA user_version=1;").unwrap();
+    conn.execute_batch("ALTER TABLE clips DROP COLUMN crop; ALTER TABLE clips DROP COLUMN link; ALTER TABLE clips DROP COLUMN fade_in; ALTER TABLE clips DROP COLUMN fade_out; DELETE FROM tracks WHERE lane=3; PRAGMA user_version=1;").unwrap();
     drop(conn);
     let migrated = persistence::load(&file).unwrap();
     assert_eq!(migrated.lane(0).len(), 1);
@@ -276,6 +276,73 @@ fn export_plan_obeys_model() {
     p.clips[1].fade_in = HZ / 2;
     // Planner refuses missing assets instead of producing an unrelated substitute.
     assert!(svbb::render::plan(&p, &svbb::render::RenderSettings::project(&p)).is_err());
+}
+
+#[test]
+fn crops_are_per_clip_undoable_and_survive_splits_and_project_roundtrips() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut p = project();
+    p.media[0].path = temp.path().join("recording.mp4");
+    let clip = add(&mut p, 0, 0, 8);
+    let first = CropRect {
+        x: 100,
+        y: 100,
+        width: 640,
+        height: 360,
+    };
+    let other = CropRect {
+        x: 800,
+        y: 200,
+        width: 640,
+        height: 360,
+    };
+    let mut history = History::default();
+    history
+        .apply(&mut p, |p| edit::crop(p, &clip, Some(first)))
+        .unwrap();
+    let right = edit::split(&mut p, &clip, HZ * 4).unwrap();
+    assert!(p.clips.iter().all(|c| c.crop == Some(first)));
+    history
+        .apply(&mut p, |p| edit::crop(p, &clip, Some(other)))
+        .unwrap();
+    assert_eq!(
+        p.clips.iter().find(|c| c.id == right).unwrap().crop,
+        Some(first)
+    );
+    history.undo(&mut p);
+    assert!(p.clips.iter().all(|c| c.crop == Some(first)));
+    history.redo(&mut p);
+    let path = temp.path().join("crops.svbb");
+    persistence::save(&path, &p).unwrap();
+    assert_eq!(persistence::load(&path).unwrap(), p);
+    let before = p.clone();
+    assert!(
+        history
+            .apply(&mut p, |p| edit::crop(
+                p,
+                &clip,
+                Some(CropRect { x: 1900, ..other })
+            ))
+            .is_err()
+    );
+    assert_eq!(p, before);
+    p.tracks[0].locked = true;
+    assert!(edit::crop(&mut p, &clip, None).is_err());
+    p.tracks[0].locked = false;
+    history
+        .apply(&mut p, |p| edit::crop(p, &clip, None))
+        .unwrap();
+    assert_eq!(
+        p.clips.iter().find(|c| c.id == right).unwrap().crop,
+        Some(first)
+    );
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch("ALTER TABLE clips DROP COLUMN crop; PRAGMA user_version=3;")
+        .unwrap();
+    drop(conn);
+    let migrated = persistence::load(&path).unwrap();
+    assert!(migrated.clips.iter().all(|c| c.crop.is_none()));
+    assert!(path.with_extension("v3.backup").is_file());
 }
 proptest::proptest! {
     #[test]fn repeated_splits_preserve_total(frames in proptest::collection::vec(1i64..599,0..60)) {

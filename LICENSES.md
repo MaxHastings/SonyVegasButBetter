@@ -66,6 +66,10 @@ destination. CPU uses x264 fast with CRF 25/21/17; NVENC uses p5/hq VBR with CQ
 All paths output H.264 YUV420P and AAC stereo 48 kHz, 192 kbps with MP4 faststart.
 GPU driver libraries are provided by the operating system.
 
+The optional size-limit goal uses CPU libx264 medium, two-pass average bitrate
+encoding and AAC stereo 48 kHz at 64/96/128/192 kbps according to the byte budget.
+It has the same selected runtime licensing boundary as other exports.
+
 Before public redistribution, audit complete corresponding-source/build-material
 availability for every linked native runtime dependency and satisfy all notices
 and source distribution obligations. The package contains SVBB source, Rust

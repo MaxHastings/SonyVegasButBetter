@@ -120,17 +120,39 @@ impl Editor {
                 .default_width(540.)
                 .show(ctx, |ui| {
                     ui.add_enabled_ui(self.render_job.is_none(), |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("Export goal");
+                            ui.selectable_value(&mut self.render_limit, false, "Choose quality");
+                            let limit = ui.selectable_value(&mut self.render_limit, true, "Fit under a size limit");
+                            trace(ui.ctx(), "size-limit", &limit);
+                        });
+                        if self.render_limit {
+                            ui.horizontal(|ui| {
+                                ui.label("Maximum file size");
+                                let limit = ui.add(egui::DragValue::new(&mut self.render_limit_mb).range(0.1..=5000.).speed(0.1).max_decimals(2).suffix(" MB"));
+                                trace(ui.ctx(), "size-limit-mb", &limit);
+                                for mb in [10., 25., 50., 100.] {
+                                    if ui.small_button(format!("{mb:.0} MB")).clicked() { self.render_limit_mb = mb; }
+                                }
+                            });
+                            ui.small("MB = 1,000,000 bytes. Video, audio and MP4 overhead all count.");
+                            let auto = ui.checkbox(&mut self.render_auto_format, "Automatically reduce resolution / frame rate when needed");
+                            trace(ui.ctx(), "auto-size-format", &auto);
+                        }
+                        ui.add_enabled_ui(!self.render_limit || !self.render_auto_format, |ui| {
                         egui::ComboBox::from_label("Resolution / frame rate")
                             .selected_text(
-                                ["Match project", "1080p30", "1080p60"][self.render_preset],
+                                RENDER_PRESETS[self.render_preset],
                             )
                             .show_ui(ui, |ui| {
                                 for (i, name) in
-                                    ["Match project", "1080p30", "1080p60"].iter().enumerate()
+                                    RENDER_PRESETS.iter().enumerate()
                                 {
                                     ui.selectable_value(&mut self.render_preset, i, *name);
                                 }
                             });
+                        });
+                        if !self.render_limit {
                         egui::ComboBox::from_label("Quality")
                             .selected_text(
                                 ["Smaller file", "Balanced", "High quality"][self.quality],
@@ -169,6 +191,21 @@ impl Editor {
                             });
                         ui.small("Auto tests the GPU encoder and falls back to CPU if needed.");
                         ui.label("Audio: timeline mix · AAC stereo 48 kHz / 192 kbps");
+                        } else {
+                            ui.label("CPU · two-pass H.264 · quality varies to fit the limit");
+                            ui.small("The finished file is measured. A size overrun triggers a lower-bitrate retry.");
+                            match self.render_settings() {
+                                Ok(settings) => {
+                                    if let Ok(budget) = render::size_budget(settings.max_bytes.unwrap(), self.p.duration()) {
+                                        ui.label(format!("{}×{} · {:.2} fps · {:.1} s", settings.width, settings.height, settings.fps.num as f64 / settings.fps.den as f64, seconds(self.p.duration())));
+                                        ui.small(format!("Video budget: {} kbps · audio: AAC {} kbps stereo", budget.video_bps / 1000, budget.audio_bps / 1000));
+                                        ui.small("Audio quality adjusts automatically; your mix volume and timing stay intact.");
+                                        if budget.video_bps < 300_000 { ui.colored_label(Color32::YELLOW, "Very low video budget: details and motion may look soft. Shorten the edit or raise the limit for better quality."); }
+                                    }
+                                }
+                                Err(e) => { ui.colored_label(Color32::YELLOW, e.to_string()); }
+                            }
+                        }
                         ui.label(if self.p.peak_protection {
                             "Peak protection enabled"
                         } else {
@@ -191,7 +228,7 @@ impl Editor {
                                 self.render_path = path.to_string_lossy().into();
                             }
                         });
-                        let render = ui.button("Render");
+                        let render = ui.add_enabled(self.render_settings().is_ok() && self.p.duration() > 0, egui::Button::new("Render"));
                         trace(ui.ctx(), "render", &render);
                         if render.clicked() {
                             self.start_render();
@@ -199,6 +236,7 @@ impl Editor {
                     });
                     if let Some(cancel) = &self.render_job {
                         ui.add(egui::ProgressBar::new(self.render_progress).show_percentage());
+                        ui.label(&self.render_stage);
                         if let Some(encoder) = self.encoder_used {
                             ui.label(encoder.label());
                         }
@@ -230,6 +268,9 @@ impl Editor {
                             Color32::LIGHT_GREEN,
                             "Complete — output streams and duration validated.",
                         );
+                        if let Ok(meta) = std::fs::metadata(path) {
+                            ui.label(format!("File size: {:.3} MB ({} bytes)", meta.len() as f64 / 1_000_000., meta.len()));
+                        }
                         ui.label(path.display().to_string());
                         if ui.button("Open finished video").clicked() {
                             open_external(path);

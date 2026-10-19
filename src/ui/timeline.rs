@@ -393,7 +393,7 @@ impl Editor {
                                             preview.source_in + preview.duration
                                                 - self.p.fps.frame(1)
                                         };
-                                        self.show_trim_source(&c.media, source);
+                                        self.show_trim_source(&c.media, source, c.crop);
                                         self.status = format!(
                                             "{} · source {:.3}s · duration {:.3}s",
                                             if d.edge < 0 { "Trim start" } else { "Trim end" },

@@ -450,3 +450,52 @@ fn preview_crosses_black_gaps_without_stalling_audio() {
     );
     assert!(player.snapshot().error.is_none());
 }
+
+#[test]
+#[ignore]
+fn play_intent_survives_immediate_reload_seek_and_rapid_toggles() {
+    let rt = Runtime::discover().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("play-intent.wav");
+    let out = command(&rt.ffmpeg)
+        .args([
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=8",
+        ])
+        .arg(&source)
+        .output()
+        .unwrap();
+    check(&out, "Create playback intent fixture").unwrap();
+    let media = rt.probe(&source).unwrap();
+    let mut p = Project::default();
+    p.clips.push(Clip::new(&media, 1, 0));
+    p.media.push(media);
+    let plan = render::prepare_preview(&rt, &p, &AtomicBool::new(false)).unwrap();
+    let player = svbb::playback::Player::new(&rt).unwrap();
+    for _ in 0..3 {
+        player.load(plan.clone(), HZ, false);
+        player.pause();
+        player.seek(HZ);
+        player.toggle();
+        player.toggle();
+        player.toggle();
+        let start = std::time::Instant::now();
+        while player.snapshot().position <= HZ + HZ / 4
+            && start.elapsed() < std::time::Duration::from_secs(4)
+        {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(player.take_error().is_none());
+        assert!(
+            player.snapshot().position > HZ + HZ / 4,
+            "Play was lost while loading/seeking"
+        );
+        player.pause();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}

@@ -4,6 +4,18 @@ Extract the Windows portable folder and launch **SonyVegasButBetter.exe**. Keep
 `runtime` beside it. Open directly into an empty workspace. Start with copies of
 recordings you can use for testing, and save a project before a long session.
 
+For the 0.1.2 workflow, crop different timeline sections independently with Preview's
+Crop tool. Draw, move/resize, switch Free / Match project aspect, preview the result,
+and Apply. Split the event and change just one half; undo and save/reopen to verify
+the two framings. Escape cancels a draft; Reset + Apply clears one clip's crop.
+
+Render a 30- or 60-second edited timeline with **Fit under a size limit → 10 MB**.
+Leave automatic format adjustment enabled, then check the finished file's displayed
+size and listen to the mix. Audio bitrate should adjust, while mix gain and timing
+stay intact. Try an impractically small limit for a long edit: the app should explain
+the constraint before starting. Cancel during either pass and verify an existing
+destination is preserved. Upload testing against your actual account is manual.
+
 1. Import all recordings with Ctrl+I (multi-select) or drop files from Explorer.
    The left panel shows metadata and thumbnails; indexing runs in the background.
    Preview reads originals on demand. You can cut and seek while waveform

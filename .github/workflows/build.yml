@@ -3,6 +3,7 @@ on: [push, pull_request, workflow_dispatch]
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
@@ -25,10 +26,13 @@ jobs:
           ./scripts/bootstrap-runtime.ps1
           cargo test --locked --test media_pipeline -- --ignored --nocapture --test-threads=1
           cargo test --locked --test media_edges -- --ignored --nocapture --test-threads=1
+          cargo test --release --locked --test size_limit -- --ignored --nocapture --test-threads=1
+          cargo test --release --locked --test crop_pipeline -- --ignored --nocapture --test-threads=1
           ./scripts/package-windows.ps1
       - if: runner.os != 'Windows'
         run: sh scripts/package-unix.sh
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
         with:
           name: SVBB-${{ runner.os }}
           path: artifacts/

@@ -4,14 +4,21 @@ An `.svbb` file is an ordinary SQLite database, independent of the UI and media
 implementation. Integers store ticks at 282,240,000 Hz. UTF-8 paths and stable
 UUID strings identify sources/entities. `PRAGMA user_version` is the schema version.
 
-Current version: **3**.
+Current version: **4**.
 
 | Table | Authoritative fields |
 |---|---|
 | project | id, name, width, height, fps_num, fps_den, peak_protection |
 | media | id, path, metadata JSON |
 | tracks | lane (0..3), name, gain_db, mute, locked |
-| clips | id, media FK, lane FK, start, source_in, duration, gain_db, mute, fade_in, fade_out, nullable link |
+| clips | id, media FK, lane FK, start, source_in, duration, gain_db, mute, fade_in, fade_out, nullable link, nullable crop JSON |
+
+Migration 3→4 adds nullable `crop` without changing existing edits. A crop stores
+`x`, `y`, `width`, `height` in source pixels. Coordinates and sizes are even;
+rectangles must be inside the source, at least 2×2, and only belong to video clips.
+NULL displays the full source. Splits copy the value; linked audio has no crop.
+Crop changes are independent, non-destructive and undoable. The loader backs up
+schema-3 projects to `.v3.backup` before migration. Older executables reject schema 4.
 
 Media metadata JSON contains the plain Rust Media representation: duration,
 dimensions, file size, sample rate/channels, rational frame rate, optional first

@@ -17,12 +17,14 @@ pub struct Runtime {
     pub cache: PathBuf,
 }
 pub fn command(path: &Path) -> Command {
-    let mut cmd = Command::new(path);
+    let cmd = Command::new(path);
     #[cfg(windows)]
-    {
+    let cmd = {
         use std::os::windows::process::CommandExt;
+        let mut cmd = cmd;
         cmd.creation_flags(0x08000000);
-    }
+        cmd
+    };
     cmd
 }
 impl Runtime {

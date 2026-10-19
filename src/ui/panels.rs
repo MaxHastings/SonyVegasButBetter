@@ -28,7 +28,13 @@ impl Editor {
                         ui.close_menu();
                     }
                     ui.separator();
-                    if ui.button("Render MP4…").clicked() {
+                    if ui
+                        .add_enabled(
+                            self.crop_session.is_none(),
+                            egui::Button::new("Render MP4…"),
+                        )
+                        .clicked()
+                    {
                         self.render_dialog = true;
                         ui.close_menu();
                     }
@@ -115,7 +121,13 @@ impl Editor {
                         .clamp(0.05, 1000.);
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("Render MP4…").clicked() {
+                    if ui
+                        .add_enabled(
+                            self.crop_session.is_none(),
+                            egui::Button::new("Render MP4…"),
+                        )
+                        .clicked()
+                    {
                         self.render_dialog = true;
                     }
                 });
@@ -330,6 +342,18 @@ impl Editor {
     pub(super) fn preview_panel(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.strong("PREVIEW");
+            if self.crop_session.is_none() {
+                let can_crop = self
+                    .selected
+                    .as_ref()
+                    .is_some_and(|id| self.p.clips.iter().any(|c| &c.id == id && c.lane == 0))
+                    && !self.p.tracks[0].locked;
+                let crop = ui.add_enabled(can_crop, egui::Button::new("Crop"));
+                trace(ui.ctx(), "crop-open", &crop);
+                if crop.clicked() {
+                    self.begin_crop();
+                }
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(format!(
                     "{} × {} / {:.3}p",
@@ -339,18 +363,26 @@ impl Editor {
                 ));
             });
         });
+        self.crop_toolbar(ui);
         let space = ui.available_size();
         let height = (space.y - 90.).max(40.);
         let size = Vec2::new(space.x, (space.x * 9. / 16.).min(height));
-        let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+        let (rect, response) = ui.allocate_exact_size(
+            size,
+            if self.crop_session.is_some() {
+                Sense::click_and_drag()
+            } else {
+                Sense::hover()
+            },
+        );
         ui.painter().rect_filled(rect, 0., Color32::BLACK);
+        let mut target = rect;
+        let w = rect.height() * 16. / 9.;
+        if w < rect.width() {
+            target.min.x += (rect.width() - w) / 2.;
+            target.max.x = target.min.x + w;
+        }
         if let Some(t) = &self.texture {
-            let mut target = rect;
-            let w = rect.height() * 16. / 9.;
-            if w < rect.width() {
-                target.min.x += (rect.width() - w) / 2.;
-                target.max.x = target.min.x + w;
-            }
             ui.painter().image(
                 t.id(),
                 target,
@@ -366,6 +398,7 @@ impl Editor {
                 Color32::from_gray(98),
             );
         }
+        self.crop_overlay(ui, target, &response);
         ui.horizontal(|ui| {
             if ui.button("|◀").on_hover_text("Start [Home]").clicked() {
                 self.seek(0);
@@ -379,7 +412,10 @@ impl Editor {
             }
             let playing = self.player.as_ref().is_some_and(|p| !p.snapshot().paused);
             if ui
-                .button(if playing { "Pause" } else { "Play [Space]" })
+                .add_enabled(
+                    self.crop_session.is_none(),
+                    egui::Button::new(if playing { "Pause" } else { "Play [Space]" }),
+                )
                 .clicked()
             {
                 self.play();
@@ -388,7 +424,7 @@ impl Editor {
                 self.action(Action::Right);
             }
             ui.monospace(timecode(self.playhead, self.p.fps));
-            if self.source_preview {
+            if self.source_preview && self.crop_session.is_none() {
                 ui.small("TRIM · source frame");
             }
             ui.label("/");
@@ -454,6 +490,10 @@ impl Editor {
             );
             let locked = self.p.tracks[c.lane].locked;
             ui.add_enabled_ui(!locked, |ui| {
+                if c.lane==0 {
+                    if let Some(crop)=c.crop {ui.small(format!("Crop: {}×{} at {},{}",crop.width,crop.height,crop.x,crop.y));}
+                    if ui.add_enabled(self.crop_session.is_none(),egui::Button::new("Crop in preview…")).clicked() {self.begin_crop();}
+                }
                 egui::Grid::new("properties").num_columns(2).spacing([8.,8.]).show(ui, |ui| {
                     for (label, mut value) in [("Position (s)",seconds(c.start)),("Source in (s)",seconds(c.source_in)),("Duration (s)",seconds(c.duration)),("Gain (dB)",c.gain_db),("Fade in (s)",seconds(c.fade_in)),("Fade out (s)",seconds(c.fade_out))] {
                         if label == "Gain (dB)" && c.lane == 0 {continue;}

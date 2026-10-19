@@ -1,7 +1,8 @@
 # Verification
 
 Windows x64 is the only locally executed platform. macOS, Linux/X11 and Wayland
-are unverified. CI configuration is supplied; it has not run in this repository.
+GUI behavior remains unverified locally. GitHub CI builds and tests all three OSes;
+its actual run status is visible in the public repository.
 
 ## Reproduce
 
@@ -9,6 +10,8 @@ are unverified. CI configuration is supplied; it has not run in this repository.
 cargo test --release --locked
 cargo test --release --test media_pipeline -- --ignored --nocapture --test-threads=1
 cargo test --release --test media_edges -- --ignored --nocapture --test-threads=1
+cargo test --release --test size_limit -- --ignored --nocapture --test-threads=1
+cargo test --release --test crop_pipeline -- --ignored --nocapture --test-threads=1
 cargo clippy --all-targets --all-features -- -D warnings
 powershell -File scripts/run-gui-acceptance.ps1
 powershell -File scripts/test-recovery.ps1
@@ -20,7 +23,29 @@ pointer/keyboard/drop events into the actual native window, targeting rectangles
 observed from the previous UI pass. It uses real controls, commands and workers.
 The distributed release excludes this driver.
 
-## Current 0.1.1 checks
+## Current 0.1.2 checks
+
+22 core/UI tests plus 8 real-media integration tests cover the previous editing
+workflow and the new export/crop features. Size tests encode 30 and 60 seconds
+under 10,000,000 bytes, and 6 seconds under 150,000 bytes, decode full outputs,
+measure mix gain, reject an oversized validation candidate, and cancel during pass
+two while preserving a sentinel destination and removing temporary files.
+Budget tests cover decimal units, container/audio reserve, invalid limits/durations,
+overflow bounds, portrait/landscape aspect and automatic format selection.
+
+Crop tests cover per-event split inheritance/independence, undo/redo, locked tracks,
+invalid rectangles, schema-3 migration/backup and save/reopen. A real red/green
+reference checks independent native preview and two-pass export crops and verifies
+that returning to the full frame at the same timestamp restores unmodified pixels.
+The native GUI crop-size stage exercises the actual crop and size-goal controls.
+It also resizes crop corners and toggles the framed result. The existing QoL stage
+passes alongside it. A regression found during this run is covered by a real-media
+test: play intent must survive an immediate reload, seek and rapid pause toggles.
+The worker now toggles desired transport intent instead of a delayed device snapshot,
+and defers play until the pending load/seek handshake has completed.
+Reports and screenshots are under docs/verification/0.1.2.
+
+## Previous 0.1.1 checks
 
 **19 core/UI tests and all 5 real-media integration tests pass.** They cover
 insertion, split, trim, order/move, locks, snap, all ripple intersections, exact

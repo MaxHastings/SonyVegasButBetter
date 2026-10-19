@@ -52,6 +52,17 @@ fn index(p: &Project, id: &str) -> Result<usize> {
     ensure!(!p.tracks[p.clips[i].lane].locked, "Track is locked");
     Ok(i)
 }
+pub fn crop(p: &mut Project, clip: &str, crop: Option<CropRect>) -> Result<()> {
+    let i = index(p, clip)?;
+    let c = &p.clips[i];
+    ensure!(c.lane == 0, "Select a video clip to crop");
+    if let Some(rect) = crop {
+        let m = p.media(&c.media)?;
+        rect.validate(m.width, m.height)?;
+    }
+    p.clips[i].crop = crop;
+    Ok(())
+}
 fn members(p: &Project, clip: &str) -> Result<Vec<usize>> {
     let i = index(p, clip)?;
     let group = p.clips[i].link.as_ref();

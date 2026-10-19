@@ -177,7 +177,7 @@ pub struct Frame {
 enum Control {
     Command(Vec<String>),
     Seek(Tick),
-    Source(Media, Tick),
+    Source(Media, Tick, Option<CropRect>),
     Load(PreviewPlan, Tick, bool),
     Stop,
 }
@@ -314,7 +314,7 @@ impl Player {
             let mut video = crate::video::VideoWorker::new(runtime, fr.clone());
             let _ = init_tx.send(Ok(()));
             let mut project: Option<Project> = None;
-            let mut source_override: Option<(Media, Tick)> = None;
+            let mut source_override: Option<(Media, Tick, Option<CropRect>)> = None;
             let mut desired = 0;
             let mut anchor: Option<(Tick, Instant)> = None;
             let mut last_audio = None;
@@ -333,8 +333,9 @@ impl Player {
                             seek = Some(at);
                             Ok(())
                         }
-                        Control::Source(media, at) => {
-                            source_override = Some((media, at));
+                        Control::Source(media, at, crop) => {
+                            should_play = false;
+                            source_override = Some((media, at, crop));
                             let _ = api.send(h, &["set".into(), "pause".into(), "yes".into()]);
                             Ok(())
                         }
@@ -354,11 +355,9 @@ impl Player {
                             if args.first().is_some_and(|s| s == "cycle")
                                 && args.get(1).is_some_and(|s| s == "pause")
                             {
-                                should_play = if seek.is_some() || awaiting_seek.is_some() {
-                                    !should_play
-                                } else {
-                                    st.lock().unwrap().paused
-                                };
+                                // Toggle intent, never the delayed device snapshot. A play
+                                // request during reload/seek must survive until restart.
+                                should_play = !should_play;
                             }
                             if args.first().is_some_and(|s| s == "set")
                                 && args.get(1).is_some_and(|s| s == "pause")
@@ -368,9 +367,22 @@ impl Player {
                             }
                             if args.first().is_some_and(|s| s == "cycle")
                                 && args.get(1).is_some_and(|s| s == "pause")
-                                && (seek.is_some() || awaiting_seek.is_some())
+                                && (seek.is_some()
+                                    || awaiting_seek.is_some()
+                                    || pending_seek.is_some())
                             {
                                 Ok(())
+                            } else if args.first().is_some_and(|s| s == "cycle")
+                                && args.get(1).is_some_and(|s| s == "pause")
+                            {
+                                api.send(
+                                    h,
+                                    &[
+                                        "set".into(),
+                                        "pause".into(),
+                                        if should_play { "no" } else { "yes" }.into(),
+                                    ],
+                                )
                             } else {
                                 api.send(h, &args)
                             }
@@ -510,8 +522,8 @@ impl Player {
                     s.paused = paused != 0;
                     s.peak_db = if paused == 0 { peaks } else { [-120.; 2] };
                 }
-                if let Some((media, at)) = &source_override {
-                    video.request(Some(media), *at, 1.);
+                if let Some((media, at, crop)) = &source_override {
+                    video.request_cropped(Some(media), *at, 1., *crop);
                 } else if let Some(p) = &project {
                     let at = desired.clamp(0, (p.duration() - p.fps.frame(1)).max(0));
                     let frame_index =
@@ -539,7 +551,12 @@ impl Player {
                                 })
                                 .min(1.)
                         };
-                        video.request(p.media(&c.media).ok(), c.source_in + local, opacity);
+                        video.request_cropped(
+                            p.media(&c.media).ok(),
+                            c.source_in + local,
+                            opacity,
+                            c.crop,
+                        );
                     } else {
                         video.request(None, 0, 1.);
                     }
@@ -589,7 +606,10 @@ impl Player {
         let _ = self.tx.send(Control::Seek(at));
     }
     pub fn show_source(&self, media: Media, at: Tick) {
-        let _ = self.tx.send(Control::Source(media, at));
+        self.show_source_cropped(media, at, None);
+    }
+    pub fn show_source_cropped(&self, media: Media, at: Tick, crop: Option<CropRect>) {
+        let _ = self.tx.send(Control::Source(media, at, crop));
     }
     pub fn pause(&self) {
         self.send(&["set", "pause", "yes"]);

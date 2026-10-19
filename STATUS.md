@@ -1,4 +1,19 @@
-# SVBB 0.1.1 — Windows editing update
+# SVBB 0.1.2 — Size limits and per-clip cropping
+
+The source repository is public at https://github.com/MaxHastings/SonyVegasButBetter.
+No public binary release has been published. This remains a personal playtest build.
+
+Render MP4 now offers a maximum file size in decimal MB. CPU two-pass H.264
+allocates the video budget while AAC bitrate adapts automatically. Optional automatic
+format adjustment lowers resolution/frame rate when needed. Mix volume and timing
+stay intact. The finished file is measured before acceptance; an overrun retries
+once, and failed/cancelled jobs preserve the destination and clean their pass logs.
+
+Each video event has an optional non-destructive source-pixel crop. Draw, move and
+resize in the existing preview, with project aspect by default, Free mode, result
+preview, reset, Apply and Cancel. Splits inherit crops; each half is independently
+editable. Undo and schema-4 project saves preserve the result. Preview, edge-trim
+feedback and export all use the same source crop.
 
 The long-recording preview bottleneck is removed. Persistent FFmpeg decoders read
 originals on demand; the audio mix is a bounded virtual float stream rather than
@@ -12,13 +27,13 @@ loudness matching to +48 dB subject to true peak; actual GPU encoder probing, CP
 fallback, render ETA and validation. Schema 3 migrates older implicit source audio
 onto its own linked track and preserves a backup.
 
-Windows verification is recorded in TESTING.md and docs/verification/0.1.1.
+Windows verification is recorded in TESTING.md and docs/verification/0.1.2.
 The personal real-footage playtest gate remains open. macOS/Linux have not been run
 locally. This is a personal Windows playtest package, not a public release.
 
-Run artifacts/SVBB-0.1.1-windows-x64/SonyVegasButBetter.exe with its runtime folder.
-The 0.1.0 package is retained separately. Projects saved by 0.1.1 use schema 3 and
-are not readable by the older executable; migration backups preserve older files.
+Run artifacts/SVBB-0.1.2-windows-x64/SonyVegasButBetter.exe with its runtime folder.
+Older packages are retained separately. Projects saved by 0.1.2 use schema 4 and
+are not readable by older executables; migration backups preserve older files.
 
 Scope remains one video lane, three audio lanes, SDR, straight cuts/fades and the
 first source video/audio streams. Same-lane overlaps are rejected. No titles,

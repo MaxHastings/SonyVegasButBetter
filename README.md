@@ -13,6 +13,26 @@ On Windows, extract the portable package and run `SonyVegasButBetter.exe`.
 Keep its `runtime` folder alongside it. No development tools are needed.
 For source builds, see BUILDING.md. PLAYTEST.md describes the editing workflow.
 
+## Crop and fit an upload limit
+
+Edit the timeline first, then choose **Render MP4 → Fit under a size limit**.
+Enter 10 MB or a custom maximum. Video quality and audio bitrate adjust to the
+budget; automatic format adjustment can reduce resolution and frame rate as well.
+The export preserves the edited mix volume and timing. CPU two-pass H.264
+allocates bits across the edit, and the finished MP4 is measured before acceptance.
+An overrun retries at a lower bitrate; failure/cancellation preserves the destination.
+MB is decimal (1,000,000 bytes), including audio and container overhead.
+
+Select a video clip and click **Crop** in Preview. Draw a box, drag its interior
+to move it, or drag corners to resize. Match project aspect is the default;
+Free allows arbitrary rectangles. Preview result shows the framing before Apply.
+Enter applies one undoable change; Escape cancels. Reset crop restores the source.
+Every clip has its own crop. A split inherits it, then either piece can be changed
+independently. Crops save in the project and affect preview, trimming and export.
+
+The size-limit workflow is inspired by Maxwell's [Shorty](https://github.com/MaxHastings/Shorty),
+implemented here in the editor's native export pipeline.
+
 ## Workflow
 
 Import multiple recordings with Ctrl+I or OS file drop. Append or drag media onto

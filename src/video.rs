@@ -24,6 +24,10 @@ unsafe extern "C" {
         pixels: *mut u8,
         w: i32,
         h: i32,
+        crop_x: i32,
+        crop_y: i32,
+        crop_w: i32,
+        crop_h: i32,
         opaque: *mut c_void,
         cancel: extern "C" fn(*mut c_void) -> i32,
         actual: *mut f64,
@@ -92,6 +96,7 @@ impl Api {
             "swr_get_delay",
             "swr_free",
             "av_channel_layout_default",
+            "av_frame_apply_cropping",
         ];
         let mut functions = vec![];
         for name in symbols {
@@ -142,11 +147,15 @@ impl Decoder {
         Ok(Self { handle, _api: api })
     }
     pub fn frame(&mut self, at: Tick) -> Result<Frame> {
-        self.read(at, 0, &AtomicU64::new(0), &AtomicBool::new(false))
+        self.cropped_frame(at, None)
+    }
+    pub fn cropped_frame(&mut self, at: Tick, crop: Option<CropRect>) -> Result<Frame> {
+        self.read(at, crop, 0, &AtomicU64::new(0), &AtomicBool::new(false))
     }
     fn read(
         &mut self,
         at: Tick,
+        crop: Option<CropRect>,
         sequence: u64,
         generation: &AtomicU64,
         stop: &AtomicBool,
@@ -180,6 +189,10 @@ impl Decoder {
                 pixels.as_mut_ptr(),
                 960,
                 540,
+                crop.map_or(0, |c| c.x as i32),
+                crop.map_or(0, |c| c.y as i32),
+                crop.map_or(0, |c| c.width as i32),
+                crop.map_or(0, |c| c.height as i32),
                 (&mut cancellation as *mut Cancel<'_>).cast(),
                 cancel,
                 &mut actual,
@@ -204,6 +217,7 @@ struct Request {
     media: Option<Media>,
     at: Tick,
     opacity: f64,
+    crop: Option<CropRect>,
     sequence: u64,
 }
 type Mailbox = Arc<(Mutex<Option<Request>>, Condvar)>;
@@ -213,7 +227,7 @@ pub(crate) struct VideoWorker {
     stop: Arc<AtomicBool>,
     thread: Option<thread::JoinHandle<()>>,
     pub error: Arc<Mutex<Option<String>>>,
-    last: Option<(String, Tick, u64)>,
+    last: Option<(String, Tick, u64, Option<CropRect>)>,
 }
 impl VideoWorker {
     pub fn new(rt: Runtime, output: Arc<Mutex<Option<Frame>>>) -> Self {
@@ -254,6 +268,7 @@ impl VideoWorker {
                         }
                         let mut frame = decoder.as_mut().unwrap().1.read(
                             request.at,
+                            request.crop,
                             request.sequence,
                             &gen_,
                             &stop_,
@@ -301,12 +316,22 @@ impl VideoWorker {
         }
     }
     pub fn request(&mut self, media: Option<&Media>, at: Tick, opacity: f64) {
+        self.request_cropped(media, at, opacity, None);
+    }
+    pub fn request_cropped(
+        &mut self,
+        media: Option<&Media>,
+        at: Tick,
+        opacity: f64,
+        crop: Option<CropRect>,
+    ) {
         let key = (
             media
                 .map(|m| m.path.to_string_lossy().into())
                 .unwrap_or_default(),
             at,
             opacity.to_bits(),
+            crop,
         );
         if self.last.as_ref() == Some(&key) {
             return;
@@ -316,7 +341,7 @@ impl VideoWorker {
         let discontinuity = self
             .last
             .as_ref()
-            .is_none_or(|last| last.0 != key.0 || (at - last.1).abs() > HZ / 4);
+            .is_none_or(|last| last.0 != key.0 || last.3 != crop || (at - last.1).abs() > HZ / 4);
         self.last = Some(key);
         let sequence = if discontinuity {
             self.generation.fetch_add(1, Ordering::Relaxed) + 1
@@ -328,6 +353,7 @@ impl VideoWorker {
             media: media.cloned(),
             at,
             opacity,
+            crop,
             sequence,
         });
         wake.notify_one();

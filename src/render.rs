@@ -23,6 +23,9 @@ pub struct RenderSettings {
     pub protect: bool,
     #[serde(default)]
     pub encoder: Encoder,
+    /// Decimal bytes, including audio and the MP4 container. Never a soft estimate.
+    #[serde(default)]
+    pub max_bytes: Option<u64>,
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Encoder {
@@ -138,8 +141,71 @@ impl RenderSettings {
             quality: 1,
             protect: p.peak_protection,
             encoder: Encoder::Auto,
+            max_bytes: None,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct SizeBudget {
+    pub video_bps: u64,
+    pub audio_bps: u64,
+}
+
+pub fn size_budget(max_bytes: u64, duration: Tick) -> Result<SizeBudget> {
+    ensure!(
+        duration > 0 && duration <= MAX_TIME,
+        "Invalid export duration"
+    );
+    // Reserve MP4 tables, AAC priming and rate-control variation. MB means
+    // 1,000,000 bytes, matching upload limits, rather than Shorty's MiB calculation.
+    let reserve = (max_bytes / 25).max(16_384);
+    ensure!(
+        max_bytes > reserve,
+        "Size limit is too small for an MP4 file"
+    );
+    let total =
+        ((max_bytes - reserve) as u128 * 8 * HZ as u128 / duration as u128).min(80_000_000) as u64;
+    let audio_bps = match total {
+        0..=399_999 => 64_000,
+        400_000..=999_999 => 96_000,
+        1_000_000..=2_999_999 => 128_000,
+        _ => 192_000,
+    };
+    ensure!(
+        total >= audio_bps + 80_000,
+        "This size limit is too small for the timeline duration. Shorten the edit or increase the limit."
+    );
+    Ok(SizeBudget {
+        video_bps: total - audio_bps,
+        audio_bps,
+    })
+}
+
+/// Choose a smaller even canvas when a fixed bitrate cannot reasonably support
+/// the project format. Preserve aspect ratio; never upscale the chosen canvas.
+pub fn fit_size_format(s: &mut RenderSettings, duration: Tick) -> Result<()> {
+    ensure!(
+        s.width >= 16 && s.height >= 16 && s.fps.num > 0 && s.fps.den > 0,
+        "Invalid render format"
+    );
+    let Some(limit) = s.max_bytes else {
+        return Ok(());
+    };
+    let budget = size_budget(limit, duration)?;
+    let fps = s.fps.num as f64 / s.fps.den as f64;
+    if fps > 30. && budget.video_bps as f64 / (s.width as f64 * s.height as f64 * fps) < 0.08 {
+        s.fps = Rational::new(30, 1);
+    }
+    let fps = s.fps.num as f64 / s.fps.den as f64;
+    let pixels = budget.video_bps as f64 / (0.08 * fps);
+    let factor = (pixels / (s.width as f64 * s.height as f64)).sqrt().min(1.);
+    // Do not discard readability by silently shrinking below a 240p equivalent.
+    let floor = (240. / s.height.min(s.width) as f64).min(1.);
+    let factor = factor.max(floor);
+    s.width = ((s.width as f64 * factor / 2.).floor() as u32 * 2).max(16);
+    s.height = ((s.height as f64 * factor / 2.).floor() as u32 * 2).max(16);
+    Ok(())
 }
 #[derive(Debug)]
 pub struct Plan {
@@ -246,8 +312,11 @@ pub fn plan(p: &Project, s: &RenderSettings) -> Result<Plan> {
         inputs.push(video_input);
         let name = format!("v{}", vids.len());
         graph += &format!(
-            "[{n}:{}]{}{}{}[{name}];",
+            "[{n}:{}]{}{}{}{}[{name}];",
             m.video.as_ref().unwrap().index,
+            c.crop
+                .map(|r| format!("crop={}:{}:{}:{},", r.width, r.height, r.x, r.y))
+                .unwrap_or_default(),
             video_filter(
                 s.width,
                 s.height,
@@ -419,22 +488,40 @@ pub fn export_report(
     dest: &Path,
     cancel: &AtomicBool,
     mut progress: impl FnMut(f32),
-    mut encoding: impl FnMut(Encoder),
+    mut notice: impl FnMut(RenderNotice),
 ) -> Result<()> {
     let plan = plan(p, s)?;
-    let encoder = select_encoder(rt, s.encoder, cancel)?;
-    encoding(encoder);
+    let budget = s
+        .max_bytes
+        .map(|limit| size_budget(limit, plan.duration))
+        .transpose()?;
+    ensure!(!cancel.load(Ordering::Relaxed), "Cancelled");
+    notice(RenderNotice::Stage("Checking encoder"));
+    let encoder = if budget.is_some() {
+        Encoder::Software
+    } else {
+        select_encoder(rt, s.encoder, cancel)?
+    };
+    notice(RenderNotice::Encoder(encoder));
     ensure!(
         !p.media
             .iter()
             .any(|m| crate::media::same_path(&m.path, dest)),
         "Cannot overwrite a source recording"
     );
-    let parent = dest.parent().unwrap_or(Path::new("."));
+    let parent = dest
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
     ensure!(parent.is_dir(), "Output directory does not exist");
     let part = parent.join(format!(".svbb-{}.partial.mp4", id()));
+    // One private directory per job keeps pass logs alive through both passes,
+    // avoids concurrent-export collisions, and cleans all logs on every exit.
+    let work_path = rt.cache.join(format!("export-{}", id()));
+    fs::create_dir(&work_path)?;
+    let work = ExportWork(work_path);
     let result = (|| {
-        let graph = rt.cache.join(format!("export-{}.ffgraph", id()));
+        let graph = work.0.join("timeline.ffgraph");
         fs::write(&graph, &plan.graph)?;
         let mut args = vec![];
         for i in plan.inputs {
@@ -448,40 +535,119 @@ pub fn export_report(
             "-map".into(),
             "[aout]".into(),
         ]);
-        args.extend(encoder.args(s.quality));
-        args.extend([
+        let mut output = vec![
+            "-map_metadata".into(),
+            "-1".into(),
+            "-map_chapters".into(),
+            "-1".into(),
             "-pix_fmt".into(),
             "yuv420p".into(),
             "-c:a".into(),
             "aac".into(),
             "-b:a".into(),
-            "192k".into(),
+            budget.map_or(192_000, |b| b.audio_bps).to_string(),
             "-ar".into(),
             "48000".into(),
             "-ac".into(),
             "2".into(),
             "-t".into(),
             decimal(p.duration()),
-            "-movflags".into(),
-            "+faststart".into(),
-            part.to_string_lossy().into(),
-        ]);
-        let mut r = run_progress(rt, &args, p.duration(), cancel, &mut progress);
-        if r.is_err()
-            && s.encoder == Encoder::Auto
-            && encoder != Encoder::Software
-            && !cancel.load(Ordering::Relaxed)
-        {
-            let start = args.iter().position(|s| s == "-c:v").unwrap();
-            let end = args[start..].iter().position(|s| s == "-pix_fmt").unwrap() + start;
-            args.splice(start..end, Encoder::Software.args(s.quality));
-            encoding(Encoder::Software);
-            progress(0.);
-            r = run_progress(rt, &args, p.duration(), cancel, &mut progress);
+        ];
+        if let Some(mut budget) = budget {
+            let limit = s.max_bytes.unwrap();
+            for attempt in 0..2 {
+                if attempt > 0 {
+                    notice(RenderNotice::Stage(
+                        "Adjusting bitrate to satisfy the size limit",
+                    ));
+                    progress(0.);
+                }
+                for pass in 1..=2 {
+                    notice(RenderNotice::Stage(if pass == 1 {
+                        "Pass 1 of 2 · analyzing video"
+                    } else {
+                        "Pass 2 of 2 · encoding to the size budget"
+                    }));
+                    let mut pass_args = args.clone();
+                    pass_args.extend([
+                        "-c:v".into(),
+                        "libx264".into(),
+                        "-threads".into(),
+                        "4".into(),
+                        "-preset".into(),
+                        "medium".into(),
+                        "-b:v".into(),
+                        budget.video_bps.to_string(),
+                        "-pass".into(),
+                        pass.to_string(),
+                        "-passlogfile".into(),
+                        work.0.join("analysis").to_string_lossy().into(),
+                    ]);
+                    pass_args.extend(output.clone());
+                    if pass == 1 {
+                        pass_args.extend(["-f".into(), "null".into(), "-".into()]);
+                    } else {
+                        pass_args.extend([
+                            "-movflags".into(),
+                            "+faststart".into(),
+                            part.to_string_lossy().into(),
+                        ]);
+                    }
+                    let base = if pass == 1 { 0. } else { 0.4 };
+                    let weight = if pass == 1 { 0.4 } else { 0.58 };
+                    run_progress(rt, &pass_args, p.duration(), cancel, |n| {
+                        progress(base + n * weight)
+                    })?;
+                }
+                let bytes = fs::metadata(&part)?.len();
+                if bytes <= limit {
+                    break;
+                }
+                ensure!(
+                    attempt == 0,
+                    "Could not satisfy the size limit. Shorten the edit or increase the limit; the destination has been preserved."
+                );
+                budget.video_bps =
+                    (budget.video_bps as u128 * limit as u128 * 85 / bytes as u128 / 100) as u64;
+                ensure!(
+                    budget.video_bps >= 40_000,
+                    "Size limit leaves too little space for video. Shorten the edit or increase the limit."
+                );
+            }
+        } else {
+            args.extend(encoder.args(s.quality));
+            output.extend([
+                "-movflags".into(),
+                "+faststart".into(),
+                part.to_string_lossy().into(),
+            ]);
+            args.extend(output);
+            notice(RenderNotice::Stage("Encoding video and audio"));
+            let mut r = run_progress(rt, &args, p.duration(), cancel, &mut progress);
+            if r.is_err()
+                && s.encoder == Encoder::Auto
+                && encoder != Encoder::Software
+                && !cancel.load(Ordering::Relaxed)
+            {
+                let start = args.iter().position(|s| s == "-c:v").unwrap();
+                let end = args[start..]
+                    .iter()
+                    .position(|s| s == "-map_metadata")
+                    .unwrap()
+                    + start;
+                args.splice(start..end, Encoder::Software.args(s.quality));
+                notice(RenderNotice::Encoder(Encoder::Software));
+                notice(RenderNotice::Stage("GPU encoding failed · retrying on CPU"));
+                progress(0.);
+                r = run_progress(rt, &args, p.duration(), cancel, &mut progress);
+            }
+            r?;
         }
-        let _ = fs::remove_file(graph);
-        r?;
         ensure!(!cancel.load(Ordering::Relaxed), "Cancelled");
+        notice(RenderNotice::Stage(
+            "Checking size, streams, duration and decoded output",
+        ));
+        progress(0.995);
         validate(rt, &part, p.duration(), s)?;
         ensure!(!cancel.load(Ordering::Relaxed), "Cancelled");
         fs::OpenOptions::new()
@@ -498,11 +664,27 @@ pub fn export_report(
     }
     result
 }
+pub enum RenderNotice {
+    Encoder(Encoder),
+    Stage(&'static str),
+}
+struct ExportWork(PathBuf);
+impl Drop for ExportWork {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
 pub fn validate(rt: &Runtime, path: &Path, duration: Tick, s: &RenderSettings) -> Result<()> {
     ensure!(
         path.is_file() && fs::metadata(path)?.len() > 100,
         "No complete render file was produced"
     );
+    if let Some(limit) = s.max_bytes {
+        ensure!(
+            fs::metadata(path)?.len() <= limit,
+            "Rendered file exceeds the size limit; destination preserved"
+        );
+    }
     let out = command(&rt.ffprobe)
         .args([
             "-v",

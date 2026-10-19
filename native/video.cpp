@@ -42,9 +42,10 @@ struct API {
     decltype(&swr_get_delay) delay;
     decltype(&swr_free) resample_free;
     decltype(&av_channel_layout_default) layout;
+    decltype(&av_frame_apply_cropping) crop;
 
 };
-static_assert(sizeof(API) == 29 * sizeof(void*), "FFmpeg API table layout changed");
+static_assert(sizeof(API) == 30 * sizeof(void*), "FFmpeg API table layout changed");
 struct Decoder {
     API a;
     AVFormatContext* f = nullptr;
@@ -125,6 +126,7 @@ static int next_frame(Decoder* d) {
 // Retains the frame covering t plus one lookahead frame. Non-sequential requests
 // seek backwards to a keyframe, then decode presentation timestamps up to t.
 extern "C" int svbb_video_frame(void* ptr, double t, unsigned char* pixels, int width, int height,
+                                int crop_x, int crop_y, int crop_w, int crop_h,
                                 void* opaque, int (*cancel)(void*), double* actual) {
     auto d = static_cast<Decoder*>(ptr);
     struct ClearCallback { Decoder* d; ~ClearCallback() { d->cancel = nullptr; d->opaque = nullptr; } } clear{d};
@@ -158,18 +160,31 @@ extern "C" int svbb_video_frame(void* ptr, double t, unsigned char* pixels, int 
     if (interrupt(d)) return AVERROR_EXIT;
     if (!d->current->data[0]) return AVERROR_INVALIDDATA;
     // Aspect-preserving fit with opaque black letterboxing.
-    int sw = d->current->width, sh = d->current->height;
-    AVRational sar = d->current->sample_aspect_ratio;
+    // A non-owning frame view leaves the retained source frame untouched, so
+    // changing/resetting a crop at the same PTS never requires another decode.
+    AVFrame view = *d->current;
+    if (crop_w > 0 || crop_h > 0) {
+        if (crop_x < 0 || crop_y < 0 || crop_w < 2 || crop_h < 2 ||
+            crop_w > view.width || crop_h > view.height ||
+            crop_x > view.width - crop_w || crop_y > view.height - crop_h) return AVERROR(EINVAL);
+        view.crop_left = crop_x; view.crop_top = crop_y;
+        view.crop_right = view.width - crop_x - crop_w;
+        view.crop_bottom = view.height - crop_y - crop_h;
+        int r = d->a.crop(&view, AV_FRAME_CROP_UNALIGNED);
+        if (r < 0) return r;
+    }
+    int sw = view.width, sh = view.height;
+    AVRational sar = view.sample_aspect_ratio;
     double ratio = (double)sw / sh * (sar.num > 0 && sar.den > 0 ? (double)sar.num / sar.den : 1.0);
     int w = width, h = (int)std::round(width / ratio);
     if (h > height) { h = height; w = (int)std::round(height * ratio); }
     if (w < 1) w = 1; if (h < 1) h = 1;
     for (int n = 0; n < width * height; n++) { pixels[n*4] = pixels[n*4+1] = pixels[n*4+2] = 0; pixels[n*4+3] = 255; }
-    d->sws = d->a.scale_context(d->sws, sw, sh, (AVPixelFormat)d->current->format, w, h, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
+    d->sws = d->a.scale_context(d->sws, sw, sh, (AVPixelFormat)view.format, w, h, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
     if (!d->sws) return AVERROR(ENOMEM);
     unsigned char* out[4] = {pixels + ((height-h)/2 * width + (width-w)/2)*4, nullptr, nullptr, nullptr};
     int stride[4] = {width*4, 0, 0, 0};
-    int r = d->a.scale(d->sws, d->current->data, d->current->linesize, 0, sh, out, stride);
+    int r = d->a.scale(d->sws, view.data, view.linesize, 0, sh, out, stride);
     *actual = d->current_pts;
     d->cancel = nullptr; d->opaque = nullptr;
     return r < 0 ? r : 0;

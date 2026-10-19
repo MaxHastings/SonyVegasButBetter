@@ -1,7 +1,8 @@
 # SVBB 0.1.3 — Timeline placement, navigation and GPU size limits
 
 The source repository is public at https://github.com/MaxHastings/SonyVegasButBetter.
-No public binary release has been published. This remains a personal playtest build.
+The first Windows preview is published as v0.1.3. The public first-run ZIP contains
+the editor and setup scripts; pinned media tools download directly from upstream.
 
 Dragging timeline clips resolves to the nearest available placement, flush with
 neighbouring clips. Linked video/audio obey every linked lane together; a live
@@ -39,11 +40,14 @@ fallback, render ETA and validation. Schema 3 migrates older implicit source aud
 onto its own linked track and preserves a backup.
 
 Windows verification is recorded in TESTING.md and docs/verification/0.1.3.
-The personal real-footage playtest gate remains open. macOS/Linux have not been run
-locally. This is a personal Windows playtest package, not a public release.
+37 local tests and 170 native GUI steps passed, including actual NVIDIA size-limit
+exports. Windows, macOS and Linux CI passed for the editor implementation. The
+real-footage playtest gate remains open; macOS/Linux GUI behavior is unverified.
 
 Run artifacts/SVBB-0.1.3-windows-x64/SonyVegasButBetter.exe with its runtime folder.
-Older packages are retained separately. Projects saved by 0.1.2 use schema 4 and
+For the public download, extract the ZIP and run Start SVBB.cmd; first setup needs
+internet, subsequent launches work offline. Old generated builds are removed.
+Projects saved by 0.1.2 and 0.1.3 use schema 4 and
 are not readable by older executables; migration backups preserve older files.
 
 Scope remains one video lane, three audio lanes, SDR, straight cuts/fades and the

@@ -4,14 +4,24 @@ A native, local video editor for cutting gameplay and mixing separate voice
 recordings. Rust owns the edit model; FFmpeg and libmpv provide media processing.
 No account, telemetry service or network access is needed for editing.
 
-**Personal playtest build, not a public release.** See STATUS.md for the actual
-verification results and remaining release gates.
+**Early Windows preview.** [Download v0.1.3](https://github.com/MaxHastings/SonyVegasButBetter/releases/tag/v0.1.3) · [Changes](CHANGELOG.md) · [Report a bug](https://github.com/MaxHastings/SonyVegasButBetter/issues/new?template=bug_report.yml)
+
+![SVBB timeline with separate linked video/audio and crop preview](docs/verification/0.1.3/timeline-placement.png)
 
 ## Run
 
-On Windows, extract the portable package and run `SonyVegasButBetter.exe`.
-Keep its `runtime` folder alongside it. No development tools are needed.
-For source builds, see BUILDING.md. PLAYTEST.md describes the editing workflow.
+1. Download **SVBB-0.1.3-windows-x64-first-run.zip** from the release page.
+2. Extract the entire ZIP to a writable folder, such as Documents\SVBB.
+3. Double-click **Start SVBB.cmd**. First launch downloads and verifies about
+   250 MB of media tools from upstream. Windows 10/11 x64 is required.
+4. Edit normally. Later launches work offline; keep the runtime folder beside
+   the editor. No administrator access, Rust, or 7-Zip installation is required.
+
+This preview is unsigned. Setup errors stay visible and are recorded in
+`setup.log`; run the launcher again to retry. See [PLAYTEST.md](PLAYTEST.md) for
+shortcuts, [TESTING.md](TESTING.md) for coverage and [BUILDING.md](BUILDING.md)
+for source builds. macOS/Linux are built in CI; downloadable packages and native
+GUI verification are currently Windows only.
 
 ## Crop and fit an upload limit
 
@@ -46,8 +56,7 @@ Video is sequential with no overlapping primary clips. Each audio lane allows
 gaps; dragging against a neighbour stops flush automatically. Use another lane
 for overlapping recordings. Ctrl+wheel zooms at the mouse, wheel pans, + / −
 zoom at the playhead, and F toggles fit / previous view. A visible timeline slider
-also controls zoom. Source
-audio appears on its own linked clip. Move, split and trim either partner to edit
+also controls zoom. Source audio appears on its own linked clip. Move, split and trim either partner to edit
 both. Unlink in Clip Properties to edit independently.
 
 ## Limits
@@ -71,4 +80,6 @@ The project does not embed source media. Keep recordings available, or right-cli
 a missing item in Project Media and select Relink. Projects preserve the first
 video stream and first audio stream; alternate source tracks are not exposed.
 
-Application license: GPL-3.0-or-later. See LICENSES.md before redistribution.
+Application license: GPL-3.0-or-later. The public package fetches media binaries
+directly from upstream on first run; see [LICENSES.md](LICENSES.md) for provenance
+and redistribution details.

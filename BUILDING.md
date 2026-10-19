@@ -25,7 +25,11 @@ Use the release test/build profile while a debug GUI session is active.
 
 The native output is `target/release/svbb.exe`. Packaging copies and renames it to
 `artifacts/SVBB-0.1.3-windows-x64/SonyVegasButBetter.exe`, with an adjacent runtime,
-documentation, source snapshot, dependency notices and license text.
+documentation, source snapshot, dependency notices and license text. This fully
+bundled package is for local playtesting. For the public first-run archive run
+`powershell -File scripts/package-windows-release.ps1` after committing the source
+and building without `gui-test`. It includes Start SVBB.cmd and the checksum-pinned
+setup script, with Windows tar replacing any end-user 7-Zip requirement.
 
 ## Linux
 

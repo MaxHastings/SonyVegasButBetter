@@ -1,7 +1,7 @@
 # Licensing and runtime provenance
 
 SVBB source is **GPL-3.0-or-later**; LICENSE contains GPL version 3. The selected
-personal-playtest runtime uses GPL components, including x264. This build is not
+local-playtest runtime uses GPL components, including x264. This build is not
 offered as a proprietary-license distribution.
 
 ## Direct Rust dependencies
@@ -66,16 +66,23 @@ destination. CPU uses x264 fast with CRF 25/21/17; NVENC uses p5/hq VBR with CQ
 All paths output H.264 YUV420P and AAC stereo 48 kHz, 192 kbps with MP4 faststart.
 GPU driver libraries are provided by the operating system.
 
-The optional size-limit goal uses CPU libx264 medium, two-pass average bitrate
-encoding and AAC stereo 48 kHz at 64/96/128/192 kbps according to the byte budget.
+The optional size-limit goal supports GPU bitrate encoding and CPU libx264 medium
+two-pass average bitrate encoding. AAC stereo 48 kHz uses 64/96/128/192 kbps
+according to the byte budget.
 It has the same selected runtime licensing boundary as other exports.
 
-Before public redistribution, audit complete corresponding-source/build-material
-availability for every linked native runtime dependency and satisfy all notices
-and source distribution obligations. The package contains SVBB source, Rust
-notices and precise upstream source/build references; it does not contain a full
-offline source tree of all third-party codec libraries. Proprietary distribution
-and codec patent licensing have **not** been cleared. H.264/AAC patent obligations
-depend on distribution/use and jurisdiction and are not resolved by open-source
-copyright licenses. This is an outstanding public-distribution review item, not
-a claim of legal clearance.
+## Public first-run archive
+
+The GitHub Windows first-run ZIP contains the SVBB executable, application source,
+Rust/embedded-asset notices, GPL text and setup scripts. It contains no FFmpeg or
+libmpv media binaries. On the user's first launch, the script downloads the pinned
+archives directly from the upstream URLs in runtime-manifest.json, verifies archive
+and binary hashes, and retains upstream notices locally. It does not change Windows
+security settings or install system-wide software. Editing works offline thereafter.
+
+The separate fully bundled local-playtest package contains native media binaries.
+Its complete corresponding-source/build-material distribution for all linked codec
+dependencies remains unresolved; do not upload that bundle as a public release.
+Existing native source/build references above document provenance, but are not
+presented as a complete offline source bundle. H.264/AAC patent licensing is not
+resolved by the application license. No proprietary distribution rights are asserted.

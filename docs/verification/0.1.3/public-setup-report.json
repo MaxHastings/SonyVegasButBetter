@@ -1,0 +1,14 @@
+{
+  "version": "0.1.3",
+  "fresh_downloads": "passed: all three checksum-pinned upstream archives",
+  "space_in_install_path": true,
+  "offline_repeat_with_unreachable_download_urls": "passed",
+  "missing_runtime_binary_repair": "passed",
+  "interrupted_setup_retry": "passed",
+  "cmd_launcher_from_powershell_7": "passed",
+  "windows_powershell": "5.1 x64",
+  "third_party_archive_tool_required": false,
+  "installed_runtime_gui": "saved per-clip crop project loaded; native framebuffer reviewed",
+  "installed_runtime_export_and_complete_decode": "passed",
+  "bundled_native_media_binaries_in_public_zip": false
+}

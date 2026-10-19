@@ -11,6 +11,13 @@ device. Windows CI explicitly checks every native test command's exit code.
 
 ## Reproduce
 
+Public Windows setup is also checked in 64-bit Windows PowerShell: fresh upstream
+downloads/extraction in a path with spaces, offline repeat startup, retry after an
+interrupted setup, missing-runtime repair, CMD launcher module isolation, GUI launch
+and a cropped CLI export/full decode using only that installed runtime. CI exercises
+the public package setup with the pinned archive cache. The public ZIP contains no
+media binaries; the fully bundled local test archive is separate.
+
 ```
 cargo test --release --locked
 cargo test --release --test media_pipeline -- --ignored --nocapture --test-threads=1

@@ -4,8 +4,9 @@
 Use a byte ceiling as a render goal, with quality as the variable. Generic decimal
 MB limits do not bake a third-party account's changing upload policy into the app.
 Budget AAC as well as video, keep mix gain unchanged, use retained per-job two-pass
-statistics, and measure the completed file. CPU two-pass is chosen for predictable
-bit allocation; GPU quality exports remain a separate existing option.
+statistics, and measure the completed file. CPU two-pass remains available for whole-edit bit allocation. Since 0.1.3,
+Auto and explicit GPU choices also support size budgets using bitrate controls
+and measured, bounded retries.
 
 Store static source-pixel crops on individual video events, not media assets or
 the project. Draw/move/resize in the existing preview, with original context visible
@@ -39,8 +40,9 @@ bounded independently of source duration.
 Audio and video are explicit separate clips. Link IDs provide synchronized positional
 edits, while gain/fades remain independent. Legacy implicit audio is materialized by
 schema migration. Normal trims follow the pointer and keep the opposite edge fixed;
-ripple deletion is explicit. Overlapping body drops are rejected; reorder buttons
-remain available. This removes the previous surprise ripple/reorder behavior.
+ripple deletion is explicit. Body drops resolve to the nearest available placement across all linked lanes,
+with a live outline; touching edges are legal. Neighbours stay in place. Reorder
+buttons remain available for explicit swaps.
 
 ## Hardware export
 Auto performs a short real encoder probe. Listing an FFmpeg encoder alone does not
@@ -61,3 +63,12 @@ The application is GPL-3.0-or-later, compatible with the selected GPL libmpv and
 runtime. Never redistribute the installed Kdenlive FFmpeg: its build enables nonfree.
 Acquire a separate GPL runtime and record its configuration and hashes. Proprietary
 distribution would require a different audited runtime strategy and legal review.
+
+## Public Windows packaging (0.1.3)
+Publish the editor, source snapshot, notices and a first-run launcher. The launcher
+retrieves the existing checksum-pinned media archives directly from upstream,
+uses Windows tar to extract them, verifies every installed binary and retains
+upstream notices. It reuses verified interrupted downloads, repairs an incomplete
+runtime, and launches offline once complete. The public ZIP does not redistribute
+the third-party media binaries; the fully bundled local playtest package stays
+separate while its complete native corresponding-source distribution is unresolved.

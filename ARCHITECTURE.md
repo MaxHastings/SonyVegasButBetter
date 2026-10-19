@@ -29,10 +29,12 @@ rate to 30 when needed and scales the canvas while preserving its aspect ratio.
 The 240p floor avoids silently shrinking to an unreadable thumbnail; very low
 budgets are warned about or rejected before rendering.
 
-Bounded-size exports use CPU x264 two-pass encoding. Each job owns its graph and
+Bounded-size exports use GPU bitrate control or CPU x264 two-pass encoding. Auto
+probes the actual mode and can fall back to CPU. Each job owns its graph and
 pass logs in a unique cache subdirectory, retained across both passes and removed
 on success/failure/cancellation. Progress is weighted across analysis and encoding.
-An oversized result retries once with a lower video bitrate. Actual file size is
+An oversized result retries with a lower video bitrate, within three total attempts
+including any GPU fallback. Actual file size is
 checked again during validation before atomic destination replacement. A successful
 export therefore fits its ceiling; a failed job does not publish an oversized file.
 Ordinary quality-driven exports retain hardware encoding and CPU fallback.

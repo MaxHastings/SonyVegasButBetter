@@ -1,0 +1,27 @@
+name: Bug report
+description: Report a reproducible editor or Windows setup problem.
+body:
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      placeholder: 0.1.3
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What happened?
+      description: Include the steps, expected result and actual result.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Windows and hardware
+      description: Windows version, CPU/GPU, and whether the problem concerns preview, editing, setup or export.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Optional screenshot or log
+      description: Redact personal paths and identifying information. Please do not upload private recordings.

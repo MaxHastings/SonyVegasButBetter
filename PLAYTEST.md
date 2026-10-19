@@ -1,6 +1,8 @@
 # Personal playtest
 
-Extract the Windows portable folder and launch **SonyVegasButBetter.exe**. Keep
+For the GitHub first-run ZIP, extract everything and run **Start SVBB.cmd**.
+It downloads verified media tools once, then launches offline. For a locally
+bundled package, launch **SonyVegasButBetter.exe**. Keep
 `runtime` beside it. Open directly into an empty workspace. Start with copies of
 recordings you can use for testing, and save a project before a long session.
 

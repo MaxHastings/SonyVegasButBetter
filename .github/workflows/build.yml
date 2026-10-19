@@ -32,11 +32,24 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Size limit tests failed' }
           cargo test --release --locked --test crop_pipeline -- --ignored --nocapture --test-threads=1
           if ($LASTEXITCODE -ne 0) { throw 'Crop pipeline tests failed' }
-          ./scripts/package-windows.ps1
+          ./scripts/package-windows-release.ps1
+          $packages = @(Get-ChildItem artifacts -Directory -Filter '*-first-run')
+          if ($packages.Count -ne 1) { throw 'Expected one public Windows package' }
+          $package = $packages[0].FullName
+          New-Item -ItemType Directory (Join-Path $package '.setup-cache') | Out-Null
+          $manifest = Get-Content runtime-manifest.json -Raw | ConvertFrom-Json
+          foreach ($item in $manifest.archives) { Copy-Item (Join-Path 'runtime' $item.file) (Join-Path $package '.setup-cache') }
+          powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $package 'setup-runtime.ps1') -NoLaunch
+          if ($LASTEXITCODE -ne 0) { throw 'Public first-run setup failed' }
       - if: runner.os != 'Windows'
         run: sh scripts/package-unix.sh
       - uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && runner.os == 'Windows'
+        with:
+          name: SVBB-${{ runner.os }}
+          path: artifacts/*-first-run.zip
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch' && runner.os != 'Windows'
         with:
           name: SVBB-${{ runner.os }}
           path: artifacts/

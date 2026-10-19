@@ -42,7 +42,7 @@ The distributed release excludes this driver.
 ## Current 0.1.5 checks
 
 33 core/UI/budget checks, 12 real-media tests, a long-recording benchmark and
-317 native GUI steps passed locally. The interleaved warm-cache comparison
+318 native GUI steps passed locally. The interleaved warm-cache comparison
 recorded revisited frames at about 2.5–3 ms versus 40–99 ms in 0.1.4; see
 `docs/verification/0.1.5/preview-comparison.json` for all cases and limitations.
 

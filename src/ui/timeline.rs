@@ -817,7 +817,7 @@ impl Editor {
     }
     pub(super) fn reveal_playhead(&mut self) {
         let x = seconds(self.playhead) as f32 * self.zoom;
-        if x < self.timeline_offset + 16. || x > self.timeline_offset + self.timeline_width - 16. {
+        if x < self.timeline_offset || x > self.timeline_offset + self.timeline_width {
             self.timeline_previous_view = None;
             self.timeline_offset = (x - self.timeline_width / 2.).max(0.);
             self.timeline_pending_offset = Some(self.timeline_offset);

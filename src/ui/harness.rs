@@ -158,6 +158,7 @@ impl Harness {
             steps.push_back(Step::Assert("restored"));
             steps.push_back(key(Key::Home, Modifiers::NONE));
             steps.push_back(Step::Measure("undo-restored-frame"));
+            steps.push_back(Step::Assert("playhead-visible"));
             steps.push_back(key(Key::Space, Modifiers::NONE));
             steps.push_back(Step::Wait("played"));
             steps.push_back(key(Key::Space, Modifiers::NONE));
@@ -824,6 +825,13 @@ impl Harness {
                     }
                 }
                 Step::Assert(condition) => match *condition {
+                    "playhead-visible" => {
+                        let x = seconds(app.playhead) as f32 * app.zoom - app.timeline_offset;
+                        anyhow::ensure!(
+                            x >= -1. && x <= app.timeline_width + 1.,
+                            "Navigation must reveal an off-screen playhead"
+                        );
+                    }
                     "previous-cut" => {
                         anyhow::ensure!(app.playhead == HZ * 3, "Previous cut should skip the gap")
                     }

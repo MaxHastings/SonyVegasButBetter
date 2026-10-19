@@ -12,6 +12,7 @@
   Shift+F / Selection to zoom to a clip, and F to restore the prior view.
 - Auto-scroll left/right while moving or trimming at timeline edges; retain fixed
   opposite trim edges, linked audio/video and one-step undo.
+- Navigation reveals an off-screen playhead, including Home/End and exact seeks.
 - Keep repeated clip clicks at the pointer position instead of jumping to the clip start.
 - Show delayed seek feedback and add measured long-recording/native UI regressions.
 

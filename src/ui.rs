@@ -692,6 +692,7 @@ impl Editor {
         {
             player.seek(self.playhead);
         }
+        self.reveal_playhead();
     }
     fn show_trim_source(&mut self, media: &str, source: Tick, crop: Option<CropRect>) {
         if let (Some(player), Ok(m)) = (&self.player, self.p.media(media))

@@ -30,12 +30,28 @@ fn main() {
     if let Some(compiler) = compiler {
         let output =
             std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("svbb.res");
+        let resource = output.with_extension("rc");
+        let version = std::env::var("CARGO_PKG_VERSION").unwrap();
+        let tuple = format!(
+            "{},{},{},0",
+            std::env::var("CARGO_PKG_VERSION_MAJOR").unwrap(),
+            std::env::var("CARGO_PKG_VERSION_MINOR").unwrap(),
+            std::env::var("CARGO_PKG_VERSION_PATCH").unwrap()
+        );
+        let template = std::fs::read_to_string(root.join("assets/windows.rc")).unwrap();
+        std::fs::write(
+            &resource,
+            template
+                .replace("@VERSION_TUPLE@", &tuple)
+                .replace("@VERSION_STRING@", &version),
+        )
+        .expect("Cannot generate Windows version resource");
         let status = std::process::Command::new(compiler)
             .current_dir(root)
             .arg("/nologo")
             .arg("/fo")
             .arg(&output)
-            .arg("assets/windows.rc")
+            .arg(&resource)
             .status()
             .expect("Cannot run Windows resource compiler");
         assert!(status.success(), "Application resource compilation failed");

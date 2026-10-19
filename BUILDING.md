@@ -78,3 +78,6 @@ and header archives in runtime-manifest.json. It includes both source archives
 and upstream notices. scripts/check-windows-dependencies.py rejects imports of
 separate Visual C++ runtime DLLs in the executable or loader. CMake is a build
 dependency, not an end-user requirement.
+
+Windows file/product version resources are generated from Cargo's package version;
+the public packager rejects a binary with a mismatched version.

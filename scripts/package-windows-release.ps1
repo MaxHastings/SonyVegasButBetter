@@ -5,6 +5,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 if ($LASTEXITCODE -ne 0) { throw 'Windows dependency audit failed' }
 $version = ([regex]::Match((Get-Content -LiteralPath (Join-Path $projectRoot 'Cargo.toml') -Raw), '(?m)^version = "([^"]+)"')).Groups[1].Value
 if (!$version) { throw 'Package version missing' }
+if ((Get-Item -LiteralPath (Join-Path $projectRoot 'target\release\svbb.exe')).VersionInfo.FileVersion -ne $version) { throw 'Build the current package version before creating the release' }
 $packageRoot = Join-Path $projectRoot "artifacts\SVBB-$version-windows-x64-first-run"
 $archive = "$packageRoot.zip"
 if ((Test-Path -LiteralPath $packageRoot) -or (Test-Path -LiteralPath $archive)) { throw "Release output already exists: $packageRoot. Move or clean that generated package before rebuilding." }

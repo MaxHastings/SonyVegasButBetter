@@ -10,9 +10,10 @@ and measured, bounded retries.
 
 Store static source-pixel crops on individual video events, not media assets or
 the project. Draw/move/resize in the existing preview, with original context visible
-and one undoable Apply. Match project aspect is the default; Free and result preview
-remain explicit controls. A future animated-reframing feature can extend this model
-without changing the meaning of today's stored static rectangles.
+and one undoable commit per released gesture. Direct drawing enters framing without
+an Apply step. Match project aspect is the default; Free and result preview
+remain explicit controls. Source-time animation extends this model without changing
+the meaning of existing static rectangles; the current behavior is documented below.
 
 ## Native shell
 Use eframe/egui 0.31, a native Rust window with a custom timeline, no browser engine.
@@ -77,3 +78,14 @@ Clean-PC PE import auditing exposed implicit VC++ and Vulkan-loader dependencies
 Windows release builds now statically link the compiler runtime and ship a small
 app-local Vulkan loader built from pinned unmodified sources. Source archives and
 notices accompany that loader; it changes no system installation or driver.
+
+## Manual framing animation (0.1.6)
+
+Static framing stays the default. Animate explicitly creates a source-time point;
+subsequent seek-and-adjust gestures add or replace points. Linear interpolation
+and endpoint holds make timing predictable. Points are per event and persist
+through moves/splits/trims; each gesture has one undo. Turning motion off freezes
+the current view. A 256-point cap keeps project validation and graph evaluation
+bounded. Tracking is deferred until the framing workflow and correction interaction
+have been tried on real gameplay; it should eventually produce the same editable
+points rather than introduce a second framing system.

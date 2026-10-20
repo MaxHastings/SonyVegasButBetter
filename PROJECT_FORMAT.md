@@ -4,14 +4,26 @@ An `.svbb` file is an ordinary SQLite database, independent of the UI and media
 implementation. Integers store ticks at 282,240,000 Hz. UTF-8 paths and stable
 UUID strings identify sources/entities. `PRAGMA user_version` is the schema version.
 
-Current version: **4**.
+Current version: **5**.
 
 | Table | Authoritative fields |
 |---|---|
 | project | id, name, width, height, fps_num, fps_den, peak_protection |
 | media | id, path, metadata JSON |
 | tracks | lane (0..3), name, gain_db, mute, locked |
-| clips | id, media FK, lane FK, start, source_in, duration, gain_db, mute, fade_in, fade_out, nullable link, nullable crop JSON |
+| clips | id, media FK, lane FK, start, source_in, duration, gain_db, mute, fade_in, fade_out, nullable link, nullable crop JSON, framing JSON (default []) |
+
+Migration 4→5 adds `framing`, a JSON array of `{ "at": ticks, "rect": crop }`
+points, default `[]`. An empty array uses the existing static crop unchanged.
+Non-empty curves use strictly increasing source-relative times within the media,
+even bounded rectangles, video-only ownership and at most 256 points per clip.
+Evaluation linearly interpolates x/y/width/height, flooring each to even pixels,
+and holds the endpoint before/after the curve. Split copies the curve; source-in
+trims and timeline moves do not retime it. Each split can subsequently be edited
+independently. Points outside a trimmed section are retained to preserve the
+curve inside it and when extending it again. Disabling motion freezes the current
+rectangle as the static crop. Reset clears both. The loader keeps `.v4.backup`;
+older executables reject schema 5.
 
 Migration 3→4 adds nullable `crop` without changing existing edits. A crop stores
 `x`, `y`, `width`, `height` in source pixels. Coordinates and sizes are even;

@@ -117,11 +117,14 @@ impl Harness {
             steps.push_back(key(Key::Escape, Modifiers::NONE));
             steps.push_back(Step::Release(Target::CropPoint(0.5, 0.5)));
             steps.push_back(Step::Assert("restored"));
+            steps.push_back(key(Key::Space, Modifiers::NONE));
+            steps.push_back(Step::Wait("framing-played"));
+            steps.push_back(key(Key::Space, Modifiers::NONE));
             steps.push_back(Step::Click(Target::Ruler(3.)));
             steps.push_back(key(Key::S, Modifiers::NONE));
             steps.push_back(Step::Assert("frame-split"));
             steps.push_back(key(Key::Space, Modifiers::NONE));
-            steps.push_back(Step::Wait("played"));
+            steps.push_back(Step::Wait("framing-played-late"));
             steps.push_back(key(Key::Space, Modifiers::NONE));
             steps.push_back(Step::Remember);
         } else if stage == "responsive" {
@@ -859,6 +862,20 @@ impl Harness {
                         "preview" => {
                             app.preview_revision == Some(app.revision)
                                 && app.player.as_ref().is_some_and(|p| p.snapshot().loaded)
+                        }
+                        "framing-played" | "framing-played-late" => {
+                            let threshold = if *condition == "framing-played" {
+                                ticks(1.2)
+                            } else {
+                                ticks(4.2)
+                            };
+                            app.crop_session.is_none()
+                                && !app.source_preview
+                                && app.playhead > threshold
+                                && app.player.as_ref().is_some_and(|p| {
+                                    let s = p.snapshot();
+                                    !s.paused && s.video_position > threshold - app.p.fps.frame(5)
+                                })
                         }
                         "played" => app.playhead > HZ * 2,
                         "seek-resize-played" => app.playhead > ticks(8.4),

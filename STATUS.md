@@ -1,4 +1,4 @@
-# SVBB 0.1.6 — Direct framing and manual pan/zoom
+# SVBB 0.1.7 — Direct framing and manual pan/zoom
 
 The source repository is public at https://github.com/MaxHastings/SonyVegasButBetter.
 The first Windows preview was v0.1.3; v0.1.4 fixed seeks after shortening edits.
@@ -44,16 +44,16 @@ fallback, render ETA and validation. Schema 3 migrates older implicit source aud
 onto its own linked track and preserves a backup.
 
 Windows verification is recorded in TESTING.md and docs/verification. Version
-0.1.6 passes 48 core/native-media checks and 386 GUI steps, adding source-time
+0.1.7 passes 49 core/native-media checks and 389 GUI steps, adding source-time
 model/persistence tests, VFR motion preview/export pixel checks, and a
 native direct-framing workflow with real save and GPU size-limited export. Existing
 placement, trim, preview and QoL regression stages are rerun. The real-footage
 playtest gate remains open; macOS/Linux GUI behavior is unverified.
 
-Run artifacts/SVBB-0.1.6-windows-x64-first-run/Start SVBB.cmd.
+Run artifacts/SVBB-0.1.7-windows-x64-first-run/Start SVBB.cmd.
 For the public download, extract the ZIP and run Start SVBB.cmd; first setup needs
 internet, subsequent launches work offline. Old generated builds are removed.
-Projects saved by 0.1.6 use schema 5 and need 0.1.6 or newer. Schema-4 projects
+Projects saved by 0.1.7 use schema 5 and need 0.1.7 or newer. Schema-4 projects
 from 0.1.2–0.1.5 migrate with a backup. Original media is never changed.
 
 Scope remains one video lane, three audio lanes, SDR, straight cuts/fades and the

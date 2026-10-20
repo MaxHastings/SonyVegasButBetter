@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.6 — Direct framing and manual pan/zoom
+## 0.1.7 — Direct framing and manual pan/zoom
 
 - Draw directly in Preview and release to commit; remove Apply/Cancel steps.
 - Adjust frame reveals the source, with move/corner resize and Alt+drag redraw.
@@ -10,7 +10,8 @@
 - Preserve motion through splits, trims, moves, undo, schema-5 saves and migration.
 - Evaluate the same animated framing in preview, trim feedback and CPU/GPU exports,
   including size limits. Static framing remains the default; tracking is deferred.
-- Add native GUI and real-media pixel regressions for framing and animation.
+- Allow in-flight animated playback frames to finish instead of cancelling on every moving crop.
+- Add native GUI and real-media pixel regressions for framing, animation and playback.
 
 ## 0.1.5 — Responsive preview and timeline navigation
 

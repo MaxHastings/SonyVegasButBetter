@@ -79,7 +79,7 @@ Windows release builds now statically link the compiler runtime and ship a small
 app-local Vulkan loader built from pinned unmodified sources. Source archives and
 notices accompany that loader; it changes no system installation or driver.
 
-## Manual framing animation (0.1.6)
+## Manual framing animation (0.1.7)
 
 Static framing stays the default. Animate explicitly creates a source-time point;
 subsequent seek-and-adjust gestures add or replace points. Linear interpolation

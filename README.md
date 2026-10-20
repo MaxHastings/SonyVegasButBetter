@@ -4,13 +4,13 @@ A native, local video editor for cutting gameplay and mixing separate voice
 recordings. Rust owns the edit model; FFmpeg and libmpv provide media processing.
 No account, telemetry service or network access is needed for editing.
 
-**Early Windows preview.** [Download v0.1.6](https://github.com/MaxHastings/SonyVegasButBetter/releases/tag/v0.1.6) · [Changes](CHANGELOG.md) · [Report a bug](https://github.com/MaxHastings/SonyVegasButBetter/issues/new?template=bug_report.yml)
+**Early Windows preview.** [Download v0.1.7](https://github.com/MaxHastings/SonyVegasButBetter/releases/tag/v0.1.7) · [Changes](CHANGELOG.md) · [Report a bug](https://github.com/MaxHastings/SonyVegasButBetter/issues/new?template=bug_report.yml)
 
-![SVBB with direct framing, motion points and separate linked video/audio](docs/verification/0.1.6/framing-motion.png)
+![SVBB with direct framing, motion points and separate linked video/audio](docs/verification/0.1.7/framing-motion.png)
 
 ## Run
 
-1. Download **SVBB-0.1.6-windows-x64-first-run.zip** from the release page.
+1. Download **SVBB-0.1.7-windows-x64-first-run.zip** from the release page.
 2. Extract the entire ZIP to a writable folder, such as Documents\SVBB.
 3. Double-click **Start SVBB.cmd**. First launch downloads and verifies about
    250 MB of media tools from upstream. Windows 10/11 x64 is required.
@@ -26,7 +26,7 @@ GUI verification are currently Windows only.
 
 To upgrade, extract the new release into a new folder. You can copy the previous
 release's `runtime` folder into it to reuse the media tools; the launcher verifies
-them before starting. Older projects migrate with a backup. Projects saved by 0.1.6 use schema 5 and require 0.1.6 or newer.
+them before starting. Older projects migrate with a backup. Projects saved by 0.1.7 use schema 5 and require 0.1.7 or newer.
 
 Playback logs are local in `%LOCALAPPDATA%\SVBB\logs` on Windows, alongside the
 app cache on other systems. The latest eight sessions are retained, up to 1 MiB

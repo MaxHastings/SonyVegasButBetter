@@ -39,10 +39,10 @@ pointer/keyboard/drop events into the actual native window, targeting rectangles
 observed from the previous UI pass. It uses real controls, commands and workers.
 The distributed release excludes this driver.
 
-## Current 0.1.6 checks
+## Current 0.1.7 checks
 
-35 core/UI/budget checks and 13 real-media tests pass locally, plus 386 native
-GUI steps (records in `docs/verification/0.1.6`). Six GUI stages cover direct framing/animation, crop-size, general QoL, placement, seek-resize
+36 core/UI/budget checks and 13 real-media tests pass locally, plus 389 native
+GUI steps (records in `docs/verification/0.1.7`). Six GUI stages cover direct framing/animation, crop-size, general QoL, placement, seek-resize
 and responsive preview. The new framing stage uses a direct preview drag without
 opening a tool, checks the actual source rectangle under the pointer, one-step
 undo/redo, explicit Animate, seek-and-adjust motion, point navigation/removal,

@@ -483,10 +483,11 @@ impl VideoSender {
         }
         // Continuous playback may finish a nearby frame. Every new user
         // interaction cancels the prior one, even for a one-frame backward step.
+        // Animated framing changes crop within the same playback interaction;
+        // cancelling those frames could starve a decoder slower than the clock.
         let discontinuity = last.as_ref().is_none_or(|last| {
             last.interaction != interaction.id
                 || last.frame.source != key.frame.source
-                || last.frame.crop != crop
                 || (at - last.frame.at).abs() > HZ / 4
         });
         *last = Some(key);
@@ -530,6 +531,59 @@ impl Drop for VideoWorker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn animated_playback_can_finish_frames_but_new_user_requests_cancel() {
+        let sender = VideoSender {
+            mailbox: Arc::new((Mutex::new(None), Condvar::new())),
+            generation: Arc::new(AtomicU64::new(0)),
+            latest: Arc::new(AtomicU64::new(1)),
+            last: Arc::new(Mutex::new(None)),
+        };
+        let request = PreviewRequest {
+            id: 1,
+            at: 0,
+            started: std::time::Instant::now(),
+        };
+        for frame in 0..120 {
+            let at = Rational::new(60, 1).frame(frame);
+            sender.request_cropped(
+                None,
+                at,
+                1.,
+                Some(CropRect {
+                    x: frame as u32 * 2,
+                    y: 0,
+                    width: 640,
+                    height: 360,
+                }),
+                request,
+                at,
+            );
+            assert_eq!(
+                sender.generation.load(Ordering::Relaxed),
+                1,
+                "Continuous animated playback must allow an in-flight frame to finish"
+            );
+        }
+        sender.latest.store(2, Ordering::Relaxed);
+        let next = PreviewRequest { id: 2, ..request };
+        sender.request_cropped(None, 0, 1., None, next, 0);
+        assert_eq!(sender.generation.load(Ordering::Relaxed), 2);
+        sender.request_cropped(None, HZ, 1., None, request, HZ);
+        assert_eq!(
+            sender
+                .mailbox
+                .0
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .interaction
+                .id,
+            2,
+            "Obsolete dispatch must not replace the latest interaction"
+        );
+    }
     #[test]
     fn frame_cache_is_bounded_and_never_mutates_unfaded_source_pixels() {
         let mut cache = FrameCache::default();

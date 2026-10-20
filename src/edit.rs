@@ -61,6 +61,69 @@ pub fn crop(p: &mut Project, clip: &str, crop: Option<CropRect>) -> Result<()> {
         rect.validate(m.width, m.height)?;
     }
     p.clips[i].crop = crop;
+    p.clips[i].framing.clear();
+    Ok(())
+}
+/// Static framing and animation use the same rectangle; disabling motion freezes
+/// the currently displayed view, rather than jumping back to an old crop.
+pub fn animate_frame(p: &mut Project, clip: &str, at: Tick, enabled: bool) -> Result<()> {
+    let i = index(p, clip)?;
+    ensure!(p.clips[i].lane == 0, "Select a video clip to frame");
+    let c = &p.clips[i];
+    let m = p.media(&c.media)?;
+    ensure!(
+        (0..=m.duration).contains(&at),
+        "Framing point exceeds source"
+    );
+    let rect = c
+        .crop_at(at)
+        .unwrap_or(CropRect::full(m.width & !1, m.height & !1));
+    let c = &mut p.clips[i];
+    if enabled && c.framing.is_empty() {
+        c.framing.push(FramePoint { at, rect });
+    }
+    if !enabled {
+        c.crop = Some(rect);
+        c.framing.clear();
+    }
+    Ok(())
+}
+pub fn frame_at(p: &mut Project, clip: &str, at: Tick, rect: CropRect) -> Result<()> {
+    let i = index(p, clip)?;
+    let c = &p.clips[i];
+    let m = p.media(&c.media)?;
+    rect.validate(m.width, m.height)?;
+    ensure!(
+        c.lane == 0 && (0..=m.duration).contains(&at),
+        "Invalid framing point"
+    );
+    let full = CropRect::full(m.width & !1, m.height & !1);
+    let c = &mut p.clips[i];
+    if c.framing.is_empty() {
+        c.crop = (rect != full).then_some(rect);
+    } else {
+        match c.framing.binary_search_by_key(&at, |p| p.at) {
+            Ok(i) => c.framing[i].rect = rect,
+            Err(i) => {
+                ensure!(
+                    c.framing.len() < 256,
+                    "A clip supports up to 256 framing points"
+                );
+                c.framing.insert(i, FramePoint { at, rect });
+            }
+        }
+    }
+    Ok(())
+}
+pub fn remove_frame(p: &mut Project, clip: &str, at: Tick) -> Result<()> {
+    let i = index(p, clip)?;
+    ensure!(p.clips[i].lane == 0, "Select a video clip to frame");
+    let c = &mut p.clips[i];
+    let rect = c.crop_at(at);
+    c.framing.retain(|point| point.at != at);
+    if c.framing.is_empty() {
+        c.crop = rect;
+    }
     Ok(())
 }
 fn members(p: &Project, clip: &str) -> Result<Vec<usize>> {

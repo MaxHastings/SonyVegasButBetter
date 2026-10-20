@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const SCHEMA_VERSION: i32 = 4;
+pub const SCHEMA_VERSION: i32 = 5;
 pub fn migrate(conn: &mut Connection) -> Result<()> {
     let version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
     ensure!(
@@ -41,6 +41,9 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
     }
     if version < 4 {
         tx.execute_batch("ALTER TABLE clips ADD COLUMN crop TEXT;")?;
+    }
+    if version < 5 {
+        tx.execute_batch("ALTER TABLE clips ADD COLUMN framing TEXT NOT NULL DEFAULT '[]';")?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;
@@ -92,7 +95,7 @@ pub fn save(path: &Path, p: &Project) -> Result<()> {
         }
         for v in &p.clips {
             tx.execute(
-                "INSERT INTO clips VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO clips VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 params![
                     v.id,
                     v.media,
@@ -105,7 +108,8 @@ pub fn save(path: &Path, p: &Project) -> Result<()> {
                     v.fade_in,
                     v.fade_out,
                     v.link,
-                    v.crop.map(|r| serde_json::to_string(&r)).transpose()?
+                    v.crop.map(|r| serde_json::to_string(&r)).transpose()?,
+                    serde_json::to_string(&v.framing)?
                 ],
             )?;
         }
@@ -188,7 +192,7 @@ pub fn load(path: &Path) -> Result<Project> {
         seen[i] = true;
     }
     ensure!(seen.into_iter().all(|x| x), "Project is missing tracks");
-    let mut clips = c.prepare("SELECT id,media,lane,start,source_in,duration,gain_db,mute,fade_in,fade_out,link,crop FROM clips ORDER BY rowid")?;
+    let mut clips = c.prepare("SELECT id,media,lane,start,source_in,duration,gain_db,mute,fade_in,fade_out,link,crop,framing FROM clips ORDER BY rowid")?;
     p.clips = clips
         .query_map([], |r| {
             Ok(Clip {
@@ -203,6 +207,13 @@ pub fn load(path: &Path) -> Result<Project> {
                 fade_in: r.get(8)?,
                 fade_out: r.get(9)?,
                 link: r.get(10)?,
+                framing: serde_json::from_str(&r.get::<_, String>(12)?).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        12,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?,
                 crop: r
                     .get::<_, Option<String>>(11)?
                     .map(|json| {

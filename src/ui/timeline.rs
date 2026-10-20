@@ -378,6 +378,17 @@ impl Editor {
                             self.seek(ticks(((pos.x - canvas.left()) / self.zoom) as f64));
                         }
                     }
+                    if c.lane == 0 && self.selected.as_ref() == Some(&c.id) {
+                        for point in c.framing.iter().filter(|p|p.at>=c.source_in && p.at<c.source_in+c.duration) {
+                            let x=rect.left()+seconds(point.at-c.source_in) as f32*self.zoom;
+                            let center=Pos2::new(x,rect.bottom()-7.);
+                            let diamond=vec![center+Vec2::new(0.,-4.),center+Vec2::new(4.,0.),center+Vec2::new(0.,4.),center+Vec2::new(-4.,0.)];
+                            clip_painter.add(egui::Shape::convex_polygon(diamond,Color32::YELLOW,Stroke::NONE));
+                            let marker=ui.interact(Rect::from_center_size(center,Vec2::splat(10.)),Id::new(("frame-point",&c.id,point.at)),Sense::click()).on_hover_text("Framing point · click to revisit");
+                            trace(ui.ctx(),format!("frame-diamond:{}:{}",c.id,point.at),&marker);
+                            if marker.clicked() { self.seek_exact(c.start+point.at-c.source_in); }
+                        }
+                    }
                     if response.hovered() {
                         let pos = ui.ctx().pointer_hover_pos().unwrap_or(rect.center());
                         let mode = hit_mode(rect, handles, pos);
@@ -464,7 +475,7 @@ impl Editor {
                                     } else {
                                         preview.source_in + preview.duration - self.p.fps.frame(1)
                                     };
-                                    self.show_trim_source(&c.media, source, c.crop);
+                                    self.show_trim_source(&c.media, source, c.crop_at(source));
                                     self.status = format!(
                                         "{} · source {:.3}s · duration {:.3}s",
                                         if d.edge < 0 { "Trim start" } else { "Trim end" },

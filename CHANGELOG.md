@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.6 — Direct framing and manual pan/zoom
+
+- Draw directly in Preview and release to commit; remove Apply/Cancel steps.
+- Adjust frame reveals the source, with move/corner resize and Alt+drag redraw.
+- Make every gesture one undo; Escape cancels an active drag.
+- Add explicit Animate, editable source-time motion points, point navigation/removal,
+  selected-clip timeline diamonds and freeze-at-current-view when disabled.
+- Preserve motion through splits, trims, moves, undo, schema-5 saves and migration.
+- Evaluate the same animated framing in preview, trim feedback and CPU/GPU exports,
+  including size limits. Static framing remains the default; tracking is deferred.
+- Add native GUI and real-media pixel regressions for framing and animation.
+
 ## 0.1.5 — Responsive preview and timeline navigation
 
 - Send visual seeks directly to a latest-request mailbox, independently of audio

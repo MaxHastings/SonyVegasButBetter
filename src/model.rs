@@ -87,7 +87,16 @@ pub struct Clip {
     pub link: Option<String>,
     #[serde(default)]
     pub crop: Option<CropRect>,
+    /// Source-relative motion points survive moves, splits and trims unchanged.
+    #[serde(default)]
+    pub framing: Vec<FramePoint>,
 }
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FramePoint {
+    pub at: Tick,
+    pub rect: CropRect,
+}
+
 /// A static source-pixel rectangle on one video event. Audio partners have none.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CropRect {
@@ -143,7 +152,34 @@ impl Clip {
             fade_out: 0,
             link: None,
             crop: None,
+            framing: vec![],
         }
+    }
+    pub fn crop_at(&self, source: Tick) -> Option<CropRect> {
+        let Some(first) = self.framing.first() else {
+            return self.crop;
+        };
+        if source <= first.at {
+            return Some(first.rect);
+        }
+        for pair in self.framing.windows(2) {
+            if source < pair[1].at {
+                let mix = |a: u32, b: u32| {
+                    let value = a as f64
+                        + (b as f64 - a as f64) * (source - pair[0].at) as f64
+                            / (pair[1].at - pair[0].at) as f64;
+                    (value.floor() as u32) & !1
+                };
+                let (a, b) = (pair[0].rect, pair[1].rect);
+                return Some(CropRect {
+                    x: mix(a.x, b.x),
+                    y: mix(a.y, b.y),
+                    width: mix(a.width, b.width).max(2),
+                    height: mix(a.height, b.height).max(2),
+                });
+            }
+        }
+        self.framing.last().map(|p| p.rect)
     }
     pub fn clamp_fades(&mut self) {
         self.fade_in = self.fade_in.clamp(0, self.duration);
@@ -270,6 +306,19 @@ impl Project {
             if let Some(crop) = c.crop {
                 ensure!(c.lane == 0, "Only video clips can have a crop");
                 crop.validate(m.width, m.height)?;
+            }
+            ensure!(
+                c.framing.len() <= 256,
+                "A clip supports up to 256 framing points"
+            );
+            let mut previous = -1;
+            for point in &c.framing {
+                ensure!(
+                    c.lane == 0 && point.at > previous && point.at <= m.duration,
+                    "Invalid framing point time or lane"
+                );
+                point.rect.validate(m.width, m.height)?;
+                previous = point.at;
             }
             ensure!(
                 c.gain_db.is_finite() && (-60.0..=60.0).contains(&c.gain_db),

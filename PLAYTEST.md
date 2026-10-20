@@ -6,10 +6,18 @@ bundled package, launch **SonyVegasButBetter.exe**. Keep
 `runtime` beside it. Open directly into an empty workspace. Start with copies of
 recordings you can use for testing, and save a project before a long session.
 
-For the crop workflow, crop different timeline sections independently with Preview's
-Crop tool. Draw, move/resize, switch Free / Match project aspect, preview the result,
-and Apply. Split the event and change just one half; undo and save/reopen to verify
-the two framings. Escape cancels a draft; Reset + Apply clears one clip's crop.
+Select a video event and drag directly in Preview; release should save the framing
+without another click. Adjust frame shows the whole source and its frame handles.
+Move the interior, resize a corner, and try Free / Project aspect on the next drag.
+Alt+drag redraws anywhere. Undo once must reverse one gesture. Escape during a drag
+must leave the project unchanged; Escape when idle closes the controls.
+
+Enable Animate, seek four seconds later, and move/resize the frame again. Play the
+pan/zoom, click the numbered points and timeline diamonds to revisit them, remove a
+point, undo, and disable Animate to freeze the current view. Split between points,
+trim one half, save/reopen, and export with both CPU and Auto + a size limit.
+Framing must agree with the retained source frames and be independent per video
+section. Reset clears framing/motion only on the selected video clip; undo restores it.
 
 Render a 30- or 60-second edited timeline with **Fit under a size limit → 10 MB**.
 Leave automatic format adjustment enabled, then check the finished file's displayed

@@ -4,13 +4,13 @@ A native, local video editor for cutting gameplay and mixing separate voice
 recordings. Rust owns the edit model; FFmpeg and libmpv provide media processing.
 No account, telemetry service or network access is needed for editing.
 
-**Early Windows preview.** [Download v0.1.5](https://github.com/MaxHastings/SonyVegasButBetter/releases/tag/v0.1.5) · [Changes](CHANGELOG.md) · [Report a bug](https://github.com/MaxHastings/SonyVegasButBetter/issues/new?template=bug_report.yml)
+**Early Windows preview.** [Download v0.1.6](https://github.com/MaxHastings/SonyVegasButBetter/releases/tag/v0.1.6) · [Changes](CHANGELOG.md) · [Report a bug](https://github.com/MaxHastings/SonyVegasButBetter/issues/new?template=bug_report.yml)
 
-![SVBB timeline with separate linked video/audio and crop preview](docs/verification/0.1.3/timeline-placement.png)
+![SVBB with direct framing, motion points and separate linked video/audio](docs/verification/0.1.6/framing-motion.png)
 
 ## Run
 
-1. Download **SVBB-0.1.5-windows-x64-first-run.zip** from the release page.
+1. Download **SVBB-0.1.6-windows-x64-first-run.zip** from the release page.
 2. Extract the entire ZIP to a writable folder, such as Documents\SVBB.
 3. Double-click **Start SVBB.cmd**. First launch downloads and verifies about
    250 MB of media tools from upstream. Windows 10/11 x64 is required.
@@ -26,14 +26,14 @@ GUI verification are currently Windows only.
 
 To upgrade, extract the new release into a new folder. You can copy the previous
 release's `runtime` folder into it to reuse the media tools; the launcher verifies
-them before starting. Your saved projects remain compatible.
+them before starting. Older projects migrate with a backup. Projects saved by 0.1.6 use schema 5 and require 0.1.6 or newer.
 
 Playback logs are local in `%LOCALAPPDATA%\SVBB\logs` on Windows, alongside the
 app cache on other systems. The latest eight sessions are retained, up to 1 MiB
 each. Error dialogs include **Copy error details** and the session log path.
 Review logs for personal paths before sharing them; nothing is uploaded automatically.
 
-## Crop and fit an upload limit
+## Frame the action and fit an upload limit
 
 Edit the timeline first, then choose **Render MP4 → Fit under a size limit**.
 Enter 10 MB or a custom maximum. Video quality and audio bitrate adjust to the
@@ -44,12 +44,21 @@ quality. The finished MP4 is measured before acceptance.
 An overrun retries at a lower bitrate; failure/cancellation preserves the destination.
 MB is decimal (1,000,000 bytes), including audio and container overhead.
 
-Select a video clip and click **Crop** in Preview. Draw a box, drag its interior
-to move it, or drag corners to resize. Match project aspect is the default;
-Free allows arbitrary rectangles. Preview result shows the framing before Apply.
-Enter applies one undoable change; Escape cancels. Reset crop restores the source.
-Every clip has its own crop. A split inherits it, then either piece can be changed
-independently. Crops save in the project and affect preview, trimming and export.
+Select a video clip and **draw a rectangle directly in Preview**. Releasing the
+mouse commits the framing; there is no Apply step. Use **Adjust frame** (or Frame)
+to show the full source, drag inside to move, and drag corners to resize.
+Alt+drag draws a new rectangle anywhere. Project aspect is the default; Free
+allows any rectangle. Each gesture is one undo. Escape cancels the active drag,
+or closes the controls when idle. Reset removes framing and motion from that clip.
+
+For a moving view, enable **Animate** at the first position, seek later, and adjust
+the frame again. The view pans/zooms linearly between points and holds outside
+them. Click the numbered points or the diamonds on the selected video clip to
+revisit them; Remove point deletes the current point. Turning Animate off freezes
+the current view for that clip. Splits inherit independent motion; trims retain
+source timing. Static framing remains the default. Preview, trim feedback, saved
+projects and CPU/GPU exports use the same rectangles. Automatic subject tracking
+is not included in this version.
 
 The size-limit workflow is inspired by Maxwell's [Shorty](https://github.com/MaxHastings/Shorty),
 implemented here in the editor's native export pipeline.

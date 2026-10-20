@@ -39,7 +39,28 @@ pointer/keyboard/drop events into the actual native window, targeting rectangles
 observed from the previous UI pass. It uses real controls, commands and workers.
 The distributed release excludes this driver.
 
-## Current 0.1.5 checks
+## Current 0.1.6 checks
+
+35 core/UI/budget checks and 13 real-media tests pass locally, plus 386 native
+GUI steps (records in `docs/verification/0.1.6`). Six GUI stages cover direct framing/animation, crop-size, general QoL, placement, seek-resize
+and responsive preview. The new framing stage uses a direct preview drag without
+opening a tool, checks the actual source rectangle under the pointer, one-step
+undo/redo, explicit Animate, seek-and-adjust motion, point navigation/removal,
+Escape during a held drag, splits, save and a GPU size-limited export.
+
+The animated crop regression generates a changing-color VFR source (30 → 15 fps),
+trims its source in, splits midway, animates position/zoom/aspect, and exports with
+CPU two-pass under 200,000 bytes. At six positions it compares live Player output
+pixel-for-pixel against an independent native decoder using the model rectangle,
+and compares sampled export RGB values against that preview (mean channel error
+below 8 to allow encoding/scaling/chroma differences). Project tests cover source
+time continuity through moves/trims/splits, static freeze, replacement/deletion,
+invalid rectangles/times, locked/audio tracks, undo and SQLite round trips/migration.
+
+No automatic tracking, subject detection or easing curve editor is present.
+Real-gameplay composition and physical mouse/DPI variants still need user playtesting.
+
+## Previous 0.1.5 checks
 
 33 core/UI/budget checks, 12 real-media tests, a long-recording benchmark and
 318 native GUI steps passed locally. The interleaved warm-cache comparison

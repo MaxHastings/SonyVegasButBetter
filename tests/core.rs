@@ -347,7 +347,7 @@ fn populated_old_project_migrates_without_losing_edits() {
     p.tracks[1].gain_db = -3.;
     persistence::save(&file, &p).unwrap();
     let conn = rusqlite::Connection::open(&file).unwrap();
-    conn.execute_batch("ALTER TABLE clips DROP COLUMN crop; ALTER TABLE clips DROP COLUMN link; ALTER TABLE clips DROP COLUMN fade_in; ALTER TABLE clips DROP COLUMN fade_out; DELETE FROM tracks WHERE lane=3; PRAGMA user_version=1;").unwrap();
+    conn.execute_batch("ALTER TABLE clips DROP COLUMN framing; ALTER TABLE clips DROP COLUMN crop; ALTER TABLE clips DROP COLUMN link; ALTER TABLE clips DROP COLUMN fade_in; ALTER TABLE clips DROP COLUMN fade_out; DELETE FROM tracks WHERE lane=3; PRAGMA user_version=1;").unwrap();
     drop(conn);
     let migrated = persistence::load(&file).unwrap();
     assert_eq!(migrated.lane(0).len(), 1);
@@ -440,8 +440,16 @@ fn crops_are_per_clip_undoable_and_survive_splits_and_project_roundtrips() {
         p.clips.iter().find(|c| c.id == right).unwrap().crop,
         Some(first)
     );
+    let old = temp.path().join("schema-4.svbb");
+    persistence::save(&old, &p).unwrap();
+    let v4 = rusqlite::Connection::open(&old).unwrap();
+    v4.execute_batch("ALTER TABLE clips DROP COLUMN framing; PRAGMA user_version=4;")
+        .unwrap();
+    drop(v4);
+    assert_eq!(persistence::load(&old).unwrap(), p);
+    assert!(old.with_extension("v4.backup").is_file());
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("ALTER TABLE clips DROP COLUMN crop; PRAGMA user_version=3;")
+    conn.execute_batch("ALTER TABLE clips DROP COLUMN crop; ALTER TABLE clips DROP COLUMN framing; PRAGMA user_version=3;")
         .unwrap();
     drop(conn);
     let migrated = persistence::load(&path).unwrap();
@@ -524,4 +532,107 @@ fn extending_right_edge_cannot_move_start_or_push_neighbours() {
     assert_eq!(p.lane(0)[0].start, HZ * 2);
     assert_eq!(p.lane(0)[1].start, HZ * 7);
     p.validate().unwrap();
+}
+
+#[test]
+fn framing_motion_preserves_source_time_through_split_trim_move_and_roundtrip() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut p = project();
+    p.media[0].path = temp.path().join("recording.mp4");
+    let id = add(&mut p, 0, 0, 8);
+    let a = CropRect {
+        x: 0,
+        y: 0,
+        width: 960,
+        height: 540,
+    };
+    let b = CropRect {
+        x: 960,
+        y: 540,
+        width: 480,
+        height: 270,
+    };
+    edit::crop(&mut p, &id, Some(a)).unwrap();
+    edit::animate_frame(&mut p, &id, HZ, true).unwrap();
+    edit::frame_at(&mut p, &id, HZ * 5, b).unwrap();
+    let c = &p.clips[0];
+    let middle = CropRect {
+        x: 480,
+        y: 270,
+        width: 720,
+        height: 404,
+    };
+    assert_eq!(c.crop_at(0), Some(a));
+    assert_eq!(c.crop_at(HZ * 3), Some(middle));
+    assert_eq!(c.crop_at(HZ * 7), Some(b));
+    let right = edit::split(&mut p, &id, HZ * 3).unwrap();
+    assert_eq!(
+        p.clips
+            .iter()
+            .find(|c| c.id == right)
+            .unwrap()
+            .crop_at(HZ * 3),
+        Some(middle)
+    );
+    edit::trim(&mut p, &right, HZ * 4, HZ * 3, false).unwrap();
+    edit::move_clip(&mut p, &right, HZ * 12, 0).unwrap();
+    let path = temp.path().join("motion.svbb");
+    persistence::save(&path, &p).unwrap();
+    assert_eq!(persistence::load(&path).unwrap(), p);
+    let mut h = History::default();
+    let before = p.clone();
+    h.apply(&mut p, |p| edit::animate_frame(p, &right, HZ * 3, false))
+        .unwrap();
+    let c = p.clips.iter().find(|c| c.id == right).unwrap();
+    assert!(c.framing.is_empty());
+    assert_eq!(c.crop_at(HZ * 7), Some(middle));
+    assert_eq!(p.clips[0].framing.len(), 2);
+    h.undo(&mut p);
+    assert_eq!(p, before);
+    p.tracks[0].locked = true;
+    assert!(edit::frame_at(&mut p, &right, HZ * 4, a).is_err());
+}
+#[test]
+fn framing_points_replace_delete_hold_and_validate_atomically() {
+    let mut p = project();
+    let id = add(&mut p, 0, 0, 8);
+    let r = CropRect {
+        x: 400,
+        y: 200,
+        width: 640,
+        height: 360,
+    };
+    edit::animate_frame(&mut p, &id, HZ, true).unwrap();
+    edit::frame_at(&mut p, &id, HZ * 5, r).unwrap();
+    edit::frame_at(&mut p, &id, HZ * 5, r).unwrap();
+    assert_eq!(p.clips[0].framing.len(), 2);
+    edit::remove_frame(&mut p, &id, HZ).unwrap();
+    assert_eq!(p.clips[0].crop_at(0), Some(r));
+    edit::remove_frame(&mut p, &id, HZ * 5).unwrap();
+    assert!(p.clips[0].framing.is_empty());
+    assert_eq!(p.clips[0].crop, Some(r));
+    let mut h = History::default();
+    let before = p.clone();
+    assert!(
+        h.apply(&mut p, |p| edit::frame_at(
+            p,
+            &id,
+            HZ,
+            CropRect { x: 1900, ..r }
+        ))
+        .is_err()
+    );
+    assert_eq!(p, before);
+    assert!(
+        h.apply(&mut p, |p| edit::frame_at(p, &id, 101 * HZ, r))
+            .is_err()
+    );
+    assert_eq!(p, before);
+    assert!(edit::animate_frame(&mut p, &id, -1, true).is_err());
+    let audio = add(&mut p, 1, 0, 8);
+    assert!(edit::animate_frame(&mut p, &audio, 0, true).is_err());
+    edit::animate_frame(&mut p, &id, HZ, true).unwrap();
+    let duplicate = p.clips[0].framing[0];
+    p.clips[0].framing.push(duplicate);
+    assert!(p.validate().is_err());
 }

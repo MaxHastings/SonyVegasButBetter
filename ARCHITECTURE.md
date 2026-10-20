@@ -5,7 +5,7 @@ adapters consume that data. FFmpeg, SQLite and egui types never enter the projec
 
 * `model`: integer time, media metadata, four tracks, clips and explicit A/V links.
 * `edit`: copy/validate/commit commands, linked operations and bounded undo/redo.
-* `persistence`: SQLite schema 4, explicit migrations and atomic replacement saves.
+* `persistence`: SQLite schema 5, explicit migrations and atomic replacement saves.
 * `media`: source probes, progressive waveform/thumbnail indexing and loudness jobs.
 * `video` and `native/video.cpp`: persistent FFmpeg decoding and RGBA conversion.
 * `audio`: seekable, on-demand stereo float timeline mixing on mpv's demux thread.
@@ -15,12 +15,28 @@ adapters consume that data. FFmpeg, SQLite and egui types never enter the projec
 
 ## Crops and bounded-size export
 
-A clip's optional source-pixel crop is independent of its linked sound. The crop
-tool edits a draft over the original frame and commits once, so pointer motion does
-not flood undo history or change the saved model. Split copies the crop to each
-new event. Preview uses a non-owning AVFrame view with av_frame_apply_cropping,
-then scales at source resolution; the retained decoder frame is never modified.
-Export applies the same source rectangle before fitting/letterboxing the output.
+A clip has an optional static source-pixel crop and an optional sorted list of
+`FramePoint { at, rect }` values. Point times refer to source ticks, so splits copy
+the curve unchanged and trimming/moving does not retime it. Each split can then
+be edited independently. There are at most 256 points per event; bounds, time,
+uniqueness and video-only ownership are validated. Evaluation holds before/after
+the points and linearly interpolates even source-pixel coordinates between them.
+Turning animation off freezes the evaluated current rectangle. SQLite schema 5
+stores points as JSON and migrates schema 4 with an empty curve and a backup.
+
+Direct preview gestures edit an unsaved drag draft and commit once on release.
+Escape cancels only that gesture. Framing controls reserve vertical space to avoid
+moving the image beneath a new drag. Result view is restored on release; Adjust
+frame reveals the full source. Undo/redo invalidates source-preview overrides.
+Preview uses a non-owning AVFrame crop before scaling; the retained source is intact.
+
+Animated export first resolves the project frame cadence and source offsets, then
+uses interval `sendcmd` expressions to update a uniquely named crop at every frame.
+Origin and dimensions reset to legal values before applying each rectangle. Scaling
+and padding evaluate per frame; scale expressions explicitly depend on `t` to
+avoid FFmpeg's constant-expression cache. No giant upscaled source or per-frame
+command file is generated: graph size follows point count. The same graph feeds
+CPU and hardware encoders, including two-pass and bounded-size exports.
 
 An optional byte ceiling is an export constraint, separate from the project format.
 The budget reserves container overhead and AAC priming, selects AAC 64/96/128/192

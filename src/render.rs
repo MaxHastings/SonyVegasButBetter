@@ -305,6 +305,80 @@ fn video_filter(width: u32, height: u32, fps: Rational, duration: Tick, offset: 
     )
 }
 
+/// Runtime crop commands operate on source pixels before scaling. Expressions
+/// are evaluated by sendcmd once per project frame, so changing width/height
+/// never allocates an enormous upscaled source. Reset the origin and dimensions
+/// first: every intermediate rectangle must remain legal near source edges.
+fn animated_video(c: &Clip, m: &Media, p: &Project, s: &RenderSettings, n: usize) -> String {
+    let name = format!("crop@frame{n}");
+    let mut commands = String::new();
+    let mut boundaries = vec![0];
+    boundaries.extend(
+        c.framing
+            .iter()
+            .map(|p| p.at - c.source_in)
+            .filter(|t| *t > 0 && *t < c.duration),
+    );
+    boundaries.push(c.duration);
+    for times in boundaries.windows(2) {
+        let start = times[0];
+        let end = times[1];
+        let source = c.source_in + start;
+        let right = c.framing.partition_point(|p| p.at <= source);
+        let expression = |get: fn(CropRect) -> u32| {
+            if right == 0 {
+                return get(c.framing[0].rect).to_string();
+            }
+            if right == c.framing.len() {
+                return get(c.framing[right - 1].rect).to_string();
+            }
+            let (a, b) = (c.framing[right - 1], c.framing[right]);
+            format!(
+                "2*floor(({}+({})*(T+({})-({}))/({}))/2)",
+                get(a.rect),
+                get(b.rect) as i64 - get(a.rect) as i64,
+                decimal(c.source_in),
+                decimal(a.at),
+                decimal(b.at - a.at)
+            )
+        };
+        commands += &format!(
+            "{}-{} [expr] {name} x 0,[expr] {name} y 0,[expr] {name} w 2,[expr] {name} h 2,[expr] {name} w {},[expr] {name} h {},[expr] {name} x {},[expr] {name} y {};",
+            decimal(start),
+            decimal(end),
+            expression(|r| r.width),
+            expression(|r| r.height),
+            expression(|r| r.x),
+            expression(|r| r.y)
+        );
+    }
+    let r = c.crop_at(c.source_in).unwrap();
+    let offset = (m.video.as_ref().unwrap().start - c.source_in).max(0);
+    // The zero t term is deliberate: FFmpeg otherwise caches dimensions for
+    // expressions without a time/frame variable, even with eval=frame.
+    format!(
+        "fps={}/{}:round=up:start_time={},setpts=PTS-STARTPTS,tpad=start_mode=add:start_duration={}:stop_mode=clone:stop_duration={},trim=duration={},setpts=PTS-STARTPTS,sendcmd=c='{}',{}={}:{}:{}:{},scale=w='max(2,2*floor(min({},{}*iw*sar/ih)/2))+0*t':h='max(2,2*floor(min({},{}*ih/(iw*sar))/2))+0*t':eval=frame,setsar=1,pad={}:{}:(ow-iw)/2:(oh-ih)/2:eval=frame,format=yuv420p",
+        p.fps.num,
+        p.fps.den,
+        decimal(offset),
+        decimal(offset),
+        decimal(c.duration),
+        decimal(c.duration),
+        commands,
+        name,
+        r.width,
+        r.height,
+        r.x,
+        r.y,
+        s.width,
+        s.height,
+        s.height,
+        s.width,
+        s.width,
+        s.height
+    )
+}
+
 pub fn plan(p: &Project, s: &RenderSettings) -> Result<Plan> {
     p.validate()?;
     ensure!(p.duration() > 0, "The timeline is empty");
@@ -356,15 +430,20 @@ pub fn plan(p: &Project, s: &RenderSettings) -> Result<Plan> {
             "[{n}:{}]{}{}{}{}[{name}];",
             m.video.as_ref().unwrap().index,
             c.crop
+                .filter(|_| c.framing.is_empty())
                 .map(|r| format!("crop={}:{}:{}:{},", r.width, r.height, r.x, r.y))
                 .unwrap_or_default(),
-            video_filter(
-                s.width,
-                s.height,
-                p.fps,
-                c.duration,
-                (m.video.as_ref().unwrap().start - c.source_in).max(0)
-            ),
+            if c.framing.is_empty() {
+                video_filter(
+                    s.width,
+                    s.height,
+                    p.fps,
+                    c.duration,
+                    (m.video.as_ref().unwrap().start - c.source_in).max(0),
+                )
+            } else {
+                animated_video(c, m, p, s, n)
+            },
             video_fades(c, 0),
             if c.mute || p.tracks[0].mute {
                 ",drawbox=color=black:t=fill"

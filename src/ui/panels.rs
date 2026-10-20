@@ -30,7 +30,7 @@ impl Editor {
                     ui.separator();
                     if ui
                         .add_enabled(
-                            self.crop_session.is_none(),
+                            self.crop_session.as_ref().is_none_or(|s|!s.dragging()),
                             egui::Button::new("Render MP4…"),
                         )
                         .clicked()
@@ -126,7 +126,7 @@ impl Editor {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
                         .add_enabled(
-                            self.crop_session.is_none(),
+                            self.crop_session.as_ref().is_none_or(|s|!s.dragging()),
                             egui::Button::new("Render MP4…"),
                         )
                         .clicked()
@@ -344,6 +344,7 @@ impl Editor {
     }
     pub(super) fn preview_panel(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
+            ui.set_min_height(24.);
             ui.strong("PREVIEW");
             if self.crop_session.is_none() {
                 let can_crop = self
@@ -351,7 +352,7 @@ impl Editor {
                     .as_ref()
                     .is_some_and(|id| self.p.clips.iter().any(|c| &c.id == id && c.lane == 0))
                     && !self.p.tracks[0].locked;
-                let crop = ui.add_enabled(can_crop, egui::Button::new("Crop"));
+                let crop = ui.add_enabled(can_crop, egui::Button::new("Frame"));
                 trace(ui.ctx(), "crop-open", &crop);
                 if crop.clicked() {
                     self.begin_crop();
@@ -366,18 +367,31 @@ impl Editor {
                 ));
             });
         });
-        self.crop_toolbar(ui);
+        // Keep the preview stationary when a direct drag first reveals controls.
+        ui.allocate_ui_with_layout(
+            Vec2::new(ui.available_width(), 72.),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                ui.set_min_height(72.);
+                egui::ScrollArea::vertical()
+                    .id_salt("framing-controls")
+                    .max_height(72.)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        if self.crop_session.is_some() {
+                            self.crop_toolbar(ui);
+                        } else {
+                            ui.small(
+                                "Select a video clip, then drag the preview to frame the action.",
+                            );
+                        }
+                    });
+            },
+        );
         let space = ui.available_size();
         let height = (space.y - 90.).max(40.);
         let size = Vec2::new(space.x, (space.x * 9. / 16.).min(height));
-        let (rect, response) = ui.allocate_exact_size(
-            size,
-            if self.crop_session.is_some() {
-                Sense::click_and_drag()
-            } else {
-                Sense::hover()
-            },
-        );
+        let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
         ui.painter().rect_filled(rect, 0., Color32::BLACK);
         let mut target = rect;
         let w = rect.height() * 16. / 9.;
@@ -426,10 +440,11 @@ impl Editor {
             }
             let playing = self.player.as_ref().is_some_and(|p| !p.snapshot().paused);
             if ui
-                .add_enabled(
-                    self.crop_session.is_none(),
-                    egui::Button::new(if playing { "Pause" } else { "Play [Space]" }),
-                )
+                .add(egui::Button::new(if playing {
+                    "Pause"
+                } else {
+                    "Play [Space]"
+                }))
                 .clicked()
             {
                 self.play();
@@ -519,8 +534,8 @@ impl Editor {
             let locked = self.p.tracks[c.lane].locked;
             ui.add_enabled_ui(!locked, |ui| {
                 if c.lane==0 {
-                    if let Some(crop)=c.crop {ui.small(format!("Crop: {}×{} at {},{}",crop.width,crop.height,crop.x,crop.y));}
-                    if ui.add_enabled(self.crop_session.is_none(),egui::Button::new("Crop in preview…")).clicked() {self.begin_crop();}
+                    if !c.framing.is_empty() {ui.small(format!("Framing: {} motion points",c.framing.len()));} else if let Some(crop)=c.crop {ui.small(format!("Frame: {}×{} at {},{}",crop.width,crop.height,crop.x,crop.y));}
+                    if ui.add_enabled(self.crop_session.is_none(),egui::Button::new("Frame in preview…")).clicked() {self.begin_crop();}
                 }
                 egui::Grid::new("properties").num_columns(2).spacing([8.,8.]).show(ui, |ui| {
                     for (label, mut value) in [("Position (s)",seconds(c.start)),("Source in (s)",seconds(c.source_in)),("Duration (s)",seconds(c.duration)),("Gain (dB)",c.gain_db),("Fade in (s)",seconds(c.fade_in)),("Fade out (s)",seconds(c.fade_out))] {

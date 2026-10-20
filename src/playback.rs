@@ -256,7 +256,7 @@ fn request_video(
             p.media(&c.media).ok(),
             c.source_in + local,
             opacity,
-            c.crop,
+            c.crop_at(c.source_in + local),
             request,
             at,
         );

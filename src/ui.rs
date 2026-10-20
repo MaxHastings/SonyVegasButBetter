@@ -402,6 +402,7 @@ impl Editor {
             app.path = Some(harness.root.join(match stage.to_string_lossy().as_ref() {
                 "qol" => "gui-qol.svbb",
                 "crop-size" => "gui-crop-size.svbb",
+                "framing" => "gui-framing.svbb",
                 "placement" => "gui-placement.svbb",
                 "seek-resize" => "gui-seek-resize.svbb",
                 "responsive" => "gui-responsive.svbb",
@@ -419,6 +420,7 @@ impl Editor {
         app
     }
     fn edited(&mut self) {
+        self.refresh_crop_preview();
         self.playhead = self.playhead.clamp(0, self.p.duration());
         self.revision += 1;
         self.dirty = self.recovered_unsaved || self.p != self.saved;
@@ -708,7 +710,8 @@ impl Editor {
     }
     fn play(&mut self) {
         if self.crop_session.is_some() {
-            return;
+            self.crop_session = None;
+            self.seek(self.playhead);
         }
         if self.p.duration() == 0 {
             self.play_when_ready = false;
@@ -808,8 +811,8 @@ impl Editor {
     }
     fn start_render(&mut self) {
         if self.crop_session.is_some() {
-            self.error = Some("Apply or cancel the crop before rendering".into());
-            return;
+            self.crop_session = None;
+            self.seek(self.playhead);
         }
         let Some(rt) = self.rt.clone() else {
             return;
@@ -1317,7 +1320,7 @@ impl eframe::App for Editor {
         if !ctx.wants_keyboard_input()
             && !self.confirm_unsaved
             && !self.render_dialog
-            && self.crop_session.is_none()
+            && self.crop_session.as_ref().is_none_or(|s| !s.dragging())
         {
             let actions: Vec<_> = self
                 .shortcuts

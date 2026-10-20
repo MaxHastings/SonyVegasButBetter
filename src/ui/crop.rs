@@ -9,6 +9,11 @@ pub(super) struct CropSession {
     refresh: bool,
     at: Tick,
 }
+impl CropSession {
+    pub(super) fn dragging(&self) -> bool {
+        self.drag.is_some()
+    }
+}
 struct CropDrag {
     origin: Pos2,
     before: CropRect,
@@ -86,38 +91,27 @@ impl Editor {
             .playhead
             .clamp(c.start, c.end() - self.p.fps.frame(1).min(c.duration));
         self.crop_session = Some(CropSession {
-            clip: c.id,
+            clip: c.id.clone(),
             draft: c
-                .crop
+                .crop_at(c.source_in + self.playhead - c.start)
                 .unwrap_or(CropRect::full(m.width & !1, m.height & !1)),
-            aspect: c.crop.is_none_or(|r| {
-                (r.width as f64 / r.height as f64 - self.p.width as f64 / self.p.height as f64)
-                    .abs()
-                    < 0.01
-            }),
+            aspect: c
+                .crop_at(c.source_in + self.playhead - c.start)
+                .is_none_or(|r| {
+                    (r.width as f64 / r.height as f64 - self.p.width as f64 / self.p.height as f64)
+                        .abs()
+                        < 0.01
+                }),
             result: false,
             drag: None,
             refresh: true,
             at: -1,
         });
     }
-    fn finish_crop(&mut self, apply: bool) {
-        let Some(session) = self.crop_session.take() else {
+    fn finish_crop(&mut self) {
+        let Some(_session) = self.crop_session.take() else {
             return;
         };
-        if apply {
-            let crop = self
-                .p
-                .clips
-                .iter()
-                .find(|c| c.id == session.clip)
-                .and_then(|c| self.p.media(&c.media).ok())
-                .and_then(|m| {
-                    (session.draft != CropRect::full(m.width & !1, m.height & !1))
-                        .then_some(session.draft)
-                });
-            self.apply(|p| edit::crop(p, &session.clip, crop));
-        }
         self.seek(self.playhead);
     }
     pub(super) fn update_crop_preview(&mut self) {
@@ -128,13 +122,25 @@ impl Editor {
             self.crop_session = None;
             return;
         };
-        if self.selected.as_ref() != Some(&session.clip) || self.p.tracks[c.lane].locked {
+        if self.selected.as_ref() != Some(&session.clip)
+            || self.p.tracks[c.lane].locked
+            || self.playhead < c.start
+            || self.playhead >= c.end()
+        {
             self.crop_session = None;
             self.seek(self.playhead);
             return;
         }
         let at = c.source_in
             + (self.playhead - c.start).clamp(0, c.duration - self.p.fps.frame(1).min(c.duration));
+        if session.drag.is_none() {
+            session.draft = c.crop_at(at).unwrap_or_else(|| {
+                self.p
+                    .media(&c.media)
+                    .map(|m| CropRect::full(m.width & !1, m.height & !1))
+                    .unwrap_or(session.draft)
+            });
+        }
         if (session.refresh || session.at != at)
             && let (Some(player), Ok(m)) = (&self.player, self.p.media(&c.media))
         {
@@ -148,60 +154,107 @@ impl Editor {
         let Some(mut session) = self.crop_session.take() else {
             return;
         };
-        let Some(c) = self.p.clips.iter().find(|c| c.id == session.clip) else {
+        let Some(c) = self.p.clips.iter().find(|c| c.id == session.clip).cloned() else {
             return;
         };
         let Ok(m) = self.p.media(&c.media) else {
             return;
         };
         let full = CropRect::full(m.width & !1, m.height & !1);
-        let mut apply = false;
-        let mut cancel = false;
+        let at = c.source_in
+            + (self.playhead - c.start).clamp(0, c.duration - self.p.fps.frame(1).min(c.duration));
+        let mut close = false;
         ui.horizontal_wrapped(|ui| {
-            ui.strong("CROP");
-            let free = ui.selectable_value(&mut session.aspect, false, "Free");
-            trace(ui.ctx(), "crop-free", &free);
-            let aspect = ui.selectable_value(&mut session.aspect, true, "Match project aspect");
-            trace(ui.ctx(), "crop-aspect", &aspect);
-            if aspect.clicked() {
-                let r = pixel_rect(session.draft);
-                let ratio = self.p.width as f32 / self.p.height as f32;
-                let size = Vec2::new(
-                    r.width().min(r.height() * ratio),
-                    r.height().min(r.width() / ratio),
-                );
-                let fit = Rect::from_center_size(r.center(), size);
-                session.draft = bounded_rect(fit.min, fit.max, m.width, m.height, None);
+            ui.strong("FRAME");
+            let free = ui.selectable_value(&mut session.aspect,false,"Free");
+            trace(ui.ctx(),"crop-free",&free);
+            let aspect = ui.selectable_value(&mut session.aspect,true,"Project aspect");
+            trace(ui.ctx(),"crop-aspect",&aspect);
+            let view = ui.selectable_label(!session.result,"Adjust frame").on_hover_text("Show the full source and drag the frame. Alt+drag draws a new rectangle anywhere.");
+            trace(ui.ctx(),"crop-preview-result",&view);
+            if view.clicked() { session.result = !session.result; session.refresh = true; }
+            let mut animated = !c.framing.is_empty();
+            let animate = ui.checkbox(&mut animated,"Animate").on_hover_text("Off: one frame for the whole clip. On: seek elsewhere and adjust to add a motion point. Turning off holds the current view.");
+            trace(ui.ctx(),"frame-animate",&animate);
+            if animate.changed() {
+                self.apply(|p|edit::animate_frame(p,&session.clip,at,animated));
                 session.refresh = true;
             }
-            let preview = ui.selectable_label(session.result, "Preview result");
-            trace(ui.ctx(), "crop-preview-result", &preview);
-            if preview.clicked() {
-                session.result = !session.result;
-                session.refresh = true;
-            }
-            let reset = ui.button("Reset crop");
-            trace(ui.ctx(), "crop-reset", &reset);
-            if reset.clicked() {
-                session.draft = full;
-                session.refresh = true;
-            }
-            let accept = ui.button("Apply");
-            trace(ui.ctx(), "crop-apply", &accept);
-            apply = accept.clicked();
-            let dismiss = ui.button("Cancel");
-            trace(ui.ctx(), "crop-cancel", &dismiss);
-            cancel = dismiss.clicked();
+            let reset = ui.button("Reset").on_hover_text("Remove framing and motion from this clip. Undo restores it.");
+            trace(ui.ctx(),"crop-reset",&reset);
+            if reset.clicked() { self.apply(|p|edit::crop(p,&session.clip,None)); session.draft=full; session.refresh=true; }
+            let done = ui.button("×").on_hover_text("Close framing controls; changes are already saved to the edit [Esc]");
+            trace(ui.ctx(),"frame-close",&done);
+            close = done.clicked();
         });
-        ui.small(format!("Draw a box · drag inside to move · drag corners to resize · Enter applies / Esc cancels · {}×{} at {},{}",session.draft.width,session.draft.height,session.draft.x,session.draft.y));
-        if !ui.ctx().wants_keyboard_input() {
-            apply |= ui.input(|i| i.key_pressed(Key::Enter));
-            cancel |= ui.input(|i| i.key_pressed(Key::Escape));
+        if !c.framing.is_empty() {
+            egui::ScrollArea::horizontal()
+                .id_salt("frame-points")
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.small("Motion points");
+                        let points: Vec<_> = c
+                            .framing
+                            .iter()
+                            .filter(|p| p.at >= c.source_in && p.at < c.source_in + c.duration)
+                            .collect();
+                        for (i, point) in points.iter().enumerate() {
+                            let b = ui.selectable_label(
+                                point.at == at,
+                                format!(
+                                    "{} · {}",
+                                    i + 1,
+                                    timecode(point.at - c.source_in, self.p.fps)
+                                ),
+                            );
+                            trace(ui.ctx(), format!("frame-point-{i}"), &b);
+                            if b.clicked() {
+                                self.seek_exact(c.start + point.at - c.source_in);
+                                session.refresh = true;
+                            }
+                        }
+                        let remove = ui.add_enabled(
+                            c.framing.iter().any(|p| p.at == at),
+                            egui::Button::new("Remove point"),
+                        );
+                        trace(ui.ctx(), "frame-remove", &remove);
+                        if remove.clicked() {
+                            self.apply(|p| edit::remove_frame(p, &session.clip, at));
+                            session.refresh = true;
+                        }
+                    });
+                });
+        }
+        ui.small(if c.framing.is_empty() { "Drag the preview to frame · release saves · Ctrl+Z undoes · Alt+drag draws a new frame" } else { "Seek, then adjust to add a point · motion is linear between points · drag a corner to zoom" });
+        if !ui.ctx().wants_keyboard_input() && ui.input(|i| i.key_pressed(Key::Escape)) {
+            if let Some(drag) = session.drag.take() {
+                session.draft = drag.before;
+                session.result = true;
+                session.refresh = true;
+            } else {
+                close = true;
+            }
         }
         self.crop_session = Some(session);
-        if cancel || apply {
-            self.finish_crop(apply && !cancel);
+        if close {
+            self.finish_crop();
         }
+    }
+    fn commit_frame(&mut self) {
+        let Some(mut session) = self.crop_session.take() else {
+            return;
+        };
+        if let Some(c) = self.p.clips.iter().find(|c| c.id == session.clip) {
+            let at = c.source_in
+                + (self.playhead - c.start)
+                    .clamp(0, c.duration - self.p.fps.frame(1).min(c.duration));
+            let rect = session.draft;
+            self.apply(|p| edit::frame_at(p, &session.clip, at, rect));
+        }
+        session.drag = None;
+        session.result = true;
+        session.refresh = true;
+        self.crop_session = Some(session);
     }
     pub(super) fn crop_overlay(
         &mut self,
@@ -209,11 +262,20 @@ impl Editor {
         target: Rect,
         response: &egui::Response,
     ) {
-        let Some(session) = &mut self.crop_session else {
+        // Pressing directly in the preview enters framing; no Apply step.
+        let pressed = response.hovered() && ui.input(|i| i.pointer.primary_pressed());
+        if pressed && self.crop_session.is_none() {
+            self.begin_crop();
+        }
+        if self.crop_session.is_none() {
+            let probe = ui.interact(target, Id::new("crop-source-probe"), Sense::hover());
+            trace(ui.ctx(), "crop-source", &probe);
             return;
-        };
-        if session.result {
-            return;
+        }
+        let session = self.crop_session.as_mut().unwrap();
+        if pressed && session.result {
+            session.result = false;
+            session.refresh = true;
         }
         let Some(m) = self
             .p
@@ -236,6 +298,11 @@ impl Editor {
                 source.center(),
                 Vec2::new(source.width(), source.width() / ratio),
             );
+        }
+        let probe = ui.interact(source, Id::new("crop-source-probe"), Sense::hover());
+        trace(ui.ctx(), "crop-source", &probe);
+        if session.result {
+            return;
         }
         let to_screen = |p: Pos2| {
             source.min
@@ -262,13 +329,18 @@ impl Editor {
             && let Some(origin) = ui.input(|i| i.pointer.press_origin())
             && source.contains(origin)
         {
-            let corner = corners.iter().position(|p| p.distance(origin) < 10.);
+            let corner = (!ui.input(|i| i.modifiers.alt))
+                .then(|| corners.iter().position(|p| p.distance(origin) < 10.))
+                .flatten();
             let full = CropRect::full(m.width & !1, m.height & !1);
             session.drag = Some(CropDrag {
                 origin: to_pixel(origin),
                 before: session.draft,
                 corner,
-                moving: corner.is_none() && crop.contains(origin) && session.draft != full,
+                moving: corner.is_none()
+                    && crop.contains(origin)
+                    && session.draft != full
+                    && !ui.input(|i| i.modifiers.alt),
             });
         }
         if response.dragged()
@@ -307,9 +379,7 @@ impl Editor {
             };
             session.refresh = true;
         }
-        if response.drag_stopped() {
-            session.drag = None;
-        }
+        let commit = response.drag_stopped() && session.drag.is_some();
         let r = pixel_rect(session.draft);
         let crop = Rect::from_min_max(to_screen(r.min), to_screen(r.max));
         let shade = Color32::from_black_alpha(160);
@@ -342,7 +412,8 @@ impl Editor {
         if response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
         }
-        let probe = ui.interact(source, Id::new("crop-source-probe"), Sense::hover());
-        trace(ui.ctx(), "crop-source", &probe);
+        if commit {
+            self.commit_frame();
+        }
     }
 }

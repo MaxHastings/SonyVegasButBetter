@@ -71,7 +71,60 @@ impl Harness {
     pub fn new(stage: &str) -> Self {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-output");
         let mut steps = VecDeque::new();
-        if stage == "responsive" {
+        if stage == "framing" {
+            steps.push_back(Step::Drop);
+            steps.push_back(Step::Wait("imported"));
+            for _ in 0..6 {
+                steps.push_back(key(Key::ArrowUp, Modifiers::ALT));
+            }
+            steps.push_back(click("media:gameplay-1.mp4"));
+            steps.push_back(key(Key::Enter, Modifiers::COMMAND));
+            prop(&mut steps, "Duration (s)", "6");
+            steps.push_back(click("fit"));
+            steps.push_back(Step::Wait("preview"));
+            steps.push_back(Step::Drag(
+                Target::CropPoint(0.15, 0.15),
+                Target::CropPoint(0.75, 0.75),
+            ));
+            steps.push_back(Step::Assert("frame-direct"));
+            steps.push_back(Step::Remember);
+            steps.push_back(key(Key::Z, Modifiers::COMMAND));
+            steps.push_back(Step::Assert("crop-cleared"));
+            steps.push_back(key(Key::Y, Modifiers::COMMAND));
+            steps.push_back(Step::Assert("restored"));
+            steps.push_back(click("frame-animate"));
+            steps.push_back(Step::Assert("frame-one"));
+            steps.push_back(Step::Click(Target::Ruler(4.)));
+            steps.push_back(Step::Drag(
+                Target::CropPoint(0.4, 0.4),
+                Target::CropPoint(0.6, 0.5),
+            ));
+            steps.push_back(Step::Assert("frame-two"));
+            steps.push_back(click("frame-point-0"));
+            steps.push_back(Step::Assert("frame-first"));
+            steps.push_back(click("frame-remove"));
+            steps.push_back(Step::Assert("frame-one"));
+            steps.push_back(key(Key::Z, Modifiers::COMMAND));
+            steps.push_back(Step::Assert("frame-two"));
+            steps.push_back(click("crop-preview-result"));
+            steps.push_back(Step::Capture("framing-motion.png"));
+            steps.push_back(Step::Wait("captured"));
+            steps.push_back(Step::Remember);
+            steps.push_back(Step::HoldDrag(
+                Target::CropPoint(0.4, 0.4),
+                Target::CropPoint(0.5, 0.5),
+            ));
+            steps.push_back(key(Key::Escape, Modifiers::NONE));
+            steps.push_back(Step::Release(Target::CropPoint(0.5, 0.5)));
+            steps.push_back(Step::Assert("restored"));
+            steps.push_back(Step::Click(Target::Ruler(3.)));
+            steps.push_back(key(Key::S, Modifiers::NONE));
+            steps.push_back(Step::Assert("frame-split"));
+            steps.push_back(key(Key::Space, Modifiers::NONE));
+            steps.push_back(Step::Wait("played"));
+            steps.push_back(key(Key::Space, Modifiers::NONE));
+            steps.push_back(Step::Remember);
+        } else if stage == "responsive" {
             steps.push_back(Step::Drop);
             steps.push_back(Step::Wait("imported"));
             for _ in 0..6 {
@@ -280,10 +333,12 @@ impl Harness {
             steps.push_back(Step::Capture("crop-result.png"));
             steps.push_back(Step::Wait("captured"));
             steps.push_back(click("crop-preview-result"));
-            steps.push_back(click("crop-apply"));
+            steps.push_back(click("frame-close"));
             steps.push_back(Step::Assert("crop-committed"));
             steps.push_back(key(Key::Z, Modifiers::COMMAND));
+            steps.push_back(key(Key::Z, Modifiers::COMMAND));
             steps.push_back(Step::Assert("crop-cleared"));
+            steps.push_back(key(Key::Y, Modifiers::COMMAND));
             steps.push_back(key(Key::Y, Modifiers::COMMAND));
             steps.push_back(Step::Wait("preview"));
             steps.push_back(click("fit"));
@@ -303,15 +358,16 @@ impl Harness {
                 Target::CropPoint(0.3, 0.4),
             ));
             steps.push_back(click("crop-aspect"));
-            steps.push_back(click("crop-apply"));
+            steps.push_back(click("frame-close"));
             steps.push_back(Step::Assert("crop-independent"));
             steps.push_back(click("crop-open"));
             steps.push_back(click("crop-reset"));
-            steps.push_back(click("crop-cancel"));
+            steps.push_back(click("frame-close"));
+            steps.push_back(key(Key::Z, Modifiers::COMMAND));
             steps.push_back(Step::Assert("crop-independent"));
             steps.push_back(click("crop-open"));
             steps.push_back(click("crop-reset"));
-            steps.push_back(click("crop-apply"));
+            steps.push_back(click("frame-close"));
             steps.push_back(Step::Assert("crop-reset-independent"));
             steps.push_back(key(Key::Z, Modifiers::COMMAND));
             steps.push_back(Step::Assert("crop-independent"));
@@ -490,7 +546,7 @@ impl Harness {
             steps.push_back(key(Key::S, Modifiers::COMMAND));
             steps.push_back(Step::Wait("saved"));
             steps.push_back(key(Key::R, Modifiers::COMMAND));
-            if stage == "crop-size" {
+            if stage == "crop-size" || stage == "framing" {
                 steps.push_back(click("size-limit"));
                 prop(&mut steps, "size-limit-mb", "0.2");
                 steps.push_back(Step::Assert("size-settings"));
@@ -500,7 +556,7 @@ impl Harness {
             steps.push_back(Step::RenderPath);
             steps.push_back(click("render"));
             steps.push_back(Step::Wait("rendered"));
-            if stage == "crop-size" {
+            if stage == "crop-size" || stage == "framing" {
                 steps.push_back(Step::Assert("limited-output"));
             }
             steps.push_back(Step::CloseRender);
@@ -982,6 +1038,33 @@ impl Harness {
                         "Clip click must select and seek: {:?} / {}",
                         app.selected,
                         seconds(app.playhead)
+                    ),
+                    "frame-direct" => anyhow::ensure!(
+                        app.p.lane(0)[0].crop.is_some_and(|r| r.x.abs_diff(288) < 8
+                            && r.y.abs_diff(162) < 8
+                            && r.width.abs_diff(1152) < 8
+                            && r.height.abs_diff(648) < 8)
+                            && app.p.lane(0)[0].framing.is_empty(),
+                        "Direct drag must stay under the pointer: {:?}",
+                        app.p.lane(0)[0].crop
+                    ),
+                    "frame-one" => anyhow::ensure!(
+                        app.p.lane(0)[0].framing.len() == 1,
+                        "Expected one framing point"
+                    ),
+                    "frame-two" => anyhow::ensure!(
+                        app.p.lane(0)[0].framing.len() == 2
+                            && app.p.lane(0)[0].framing[0].rect != app.p.lane(0)[0].framing[1].rect,
+                        "Expected two distinct framing points"
+                    ),
+                    "frame-first" => {
+                        anyhow::ensure!(app.playhead == 0, "Point navigation must seek exactly")
+                    }
+                    "frame-split" => anyhow::ensure!(
+                        app.p.lane(0).len() == 2
+                            && app.p.lane(0).iter().all(|c| c.framing.len() == 2)
+                            && app.p.lane(1).iter().all(|c| c.framing.is_empty()),
+                        "Splits must retain independent source-time framing on video only"
                     ),
                     "crop-committed" => anyhow::ensure!(
                         app.p.lane(0)[0]

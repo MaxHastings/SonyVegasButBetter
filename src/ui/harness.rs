@@ -24,6 +24,7 @@ enum Step {
     Click(Target),
     Drag(Target, Target),
     HoldDrag(Target, Target),
+    MoveHeld(Target),
     Release(Target),
     Wheel(Target, f32, Modifiers),
     RememberView,
@@ -71,7 +72,34 @@ impl Harness {
     pub fn new(stage: &str) -> Self {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-output");
         let mut steps = VecDeque::new();
-        if stage == "framing" {
+        if stage == "trim-preview" {
+            steps.push_back(Step::Drop);
+            steps.push_back(Step::Wait("imported"));
+            steps.push_back(click("media:gameplay-1.mp4"));
+            steps.push_back(key(Key::Enter, Modifiers::COMMAND));
+            prop(&mut steps, "Duration (s)", "6");
+            steps.push_back(click("fit"));
+            steps.push_back(Step::Wait("preview"));
+            // A framing session must not steal the preview back from trimming.
+            steps.push_back(click("crop-open"));
+            steps.push_back(Step::Remember);
+            for (lane, left) in [(0, false), (0, true), (1, false), (1, true)] {
+                let edge = if left { Target::LeftEdge } else { Target::Edge };
+                let delta = if left { 1. } else { -1. };
+                steps.push_back(Step::HoldDrag(edge(lane, 0, 0.), edge(lane, 0, delta)));
+                steps.push_back(Step::Wait("trim-frame"));
+                steps.push_back(Step::Assert("trim-uncommitted"));
+                steps.push_back(Step::MoveHeld(edge(lane, 0, delta * 2.)));
+                steps.push_back(Step::Wait("trim-frame"));
+                steps.push_back(Step::Capture("trim-live-preview.png"));
+                steps.push_back(Step::Wait("captured"));
+                steps.push_back(Step::Release(edge(lane, 0, delta * 2.)));
+                steps.push_back(Step::Wait("preview"));
+                steps.push_back(Step::Measure("trim-released"));
+                steps.push_back(key(Key::Z, Modifiers::COMMAND));
+                steps.push_back(Step::Assert("restored"));
+            }
+        } else if stage == "framing" {
             steps.push_back(Step::Drop);
             steps.push_back(Step::Wait("imported"));
             for _ in 0..6 {
@@ -821,6 +849,10 @@ impl Harness {
                         modifiers: Modifiers::NONE,
                     });
                 }
+                Step::MoveHeld(target) => {
+                    self.events
+                        .push_back(egui::Event::PointerMoved(self.point(target, app, ctx)?));
+                }
                 Step::Drag(a, b) | Step::HoldDrag(a, b) => {
                     let from = self.point(a, app, ctx)?;
                     let to = self.point(b, app, ctx)?;
@@ -863,6 +895,39 @@ impl Harness {
                             app.preview_revision == Some(app.revision)
                                 && app.player.as_ref().is_some_and(|p| p.snapshot().loaded)
                         }
+                        "trim-frame" => {
+                            anyhow::ensure!(
+                                self.last_step.elapsed() < Duration::from_secs(8),
+                                "No displayed boundary frame while the trim is held"
+                            );
+                            let d = app.drag.as_ref().context("No held timeline drag")?;
+                            let pos = ctx.pointer_latest_pos().context("No trim pointer")?;
+                            let raw = ticks((pos.x - d.origin.x) as f64 / app.zoom as f64);
+                            let edge = app.drag_edge(
+                                d,
+                                if d.edge < 0 {
+                                    d.start + raw
+                                } else {
+                                    d.start + d.duration + raw
+                                },
+                            );
+                            let mut candidate = app.p.clone();
+                            edit::trim_edge(&mut candidate, &d.id, d.edge < 0, edge)?;
+                            let c = candidate.clips.iter().find(|c| c.id == d.id).unwrap();
+                            let source = c.source_in
+                                + if d.edge < 0 {
+                                    0
+                                } else {
+                                    c.duration - app.p.fps.frame(1)
+                                };
+                            self.last_step.elapsed() > Duration::from_millis(300)
+                                && app.source_preview
+                                && app.crop_session.is_none()
+                                && app.player.as_ref().is_some_and(|p| {
+                                    let s = p.snapshot();
+                                    s.presented_ms.is_some() && s.video_position == source
+                                })
+                        }
                         "framing-played" | "framing-played-late" => {
                             let threshold = if *condition == "framing-played" {
                                 ticks(1.2)
@@ -898,6 +963,10 @@ impl Harness {
                     }
                 }
                 Step::Assert(condition) => match *condition {
+                    "trim-uncommitted" => anyhow::ensure!(
+                        app.p == *self.baseline.as_ref().unwrap(),
+                        "Previewing a held trim must not commit the edit"
+                    ),
                     "playhead-visible" => {
                         let x = seconds(app.playhead) as f32 * app.zoom - app.timeline_offset;
                         anyhow::ensure!(

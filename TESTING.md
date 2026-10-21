@@ -39,7 +39,22 @@ pointer/keyboard/drop events into the actual native window, targeting rectangles
 observed from the previous UI pass. It uses real controls, commands and workers.
 The distributed release excludes this driver.
 
-## Current 0.1.7 checks
+## Current 0.1.8 checks
+
+Version 0.1.8 passes 36 core/UI/budget checks, eight native preview/media edge
+tests, and 283 native GUI steps across trim-preview, framing, seek-resize and
+responsive preview (records in `docs/verification/0.1.8`). Formatting and strict
+Clippy checks pass. Unchanged render pipelines retain the additional 0.1.7 tests
+described below.
+
+The new `trim-preview` native GUI stage holds and shortens both ends of video
+and linked audio events, changes the boundary while holding, and checks a
+presented video frame at each expected source time before release. It starts with
+framing controls open, checks that no model edit commits during the gesture,
+undoes each completed trim, then saves and exports. The test fails on 0.1.7
+with no displayed boundary frame during the held trim.
+
+## Previous 0.1.7 checks
 
 36 core/UI/budget checks and 13 real-media tests pass locally, plus 389 native
 GUI steps (records in `docs/verification/0.1.7`). Six GUI stages cover direct framing/animation, crop-size, general QoL, placement, seek-resize

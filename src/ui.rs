@@ -71,6 +71,13 @@ struct Drag {
     origin: Pos2,
     scroll_offset: f32,
 }
+struct TrimPreview {
+    media: String,
+    source: Tick,
+    crop: Option<CropRect>,
+    request_id: u64,
+    complete: bool,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Action {
     Play,
@@ -213,6 +220,7 @@ struct Editor {
     waveform_auto: bool,
     asset_cancel: Arc<AtomicBool>,
     source_preview: bool,
+    trim_preview: Option<TrimPreview>,
     crop_session: Option<crop::CropSession>,
     play_when_ready: bool,
     drag: Option<Drag>,
@@ -342,6 +350,7 @@ impl Editor {
             waveform_auto: true,
             asset_cancel: Arc::new(AtomicBool::new(false)),
             source_preview: false,
+            trim_preview: None,
             crop_session: None,
             play_when_ready: false,
             drag: None,
@@ -624,6 +633,7 @@ impl Editor {
         }
     }
     fn reset(&mut self, p: Project, path: Option<PathBuf>) {
+        self.trim_preview = None;
         self.crop_session = None;
         if let Some(player) = &self.player {
             player.send(&["stop"]);
@@ -683,6 +693,7 @@ impl Editor {
         self.seek_exact(t);
     }
     fn seek_exact(&mut self, t: Tick) {
+        self.trim_preview = None;
         self.refresh_crop_preview();
         self.source_preview = false;
         self.playhead = t.clamp(0, self.p.duration());
@@ -700,11 +711,27 @@ impl Editor {
         if let (Some(player), Ok(m)) = (&self.player, self.p.media(media))
             && m.video.is_some()
         {
-            player.show_source_cropped(
-                m.clone(),
-                source.clamp(0, (m.duration - self.p.fps.frame(1)).max(0)),
+            let source = source.clamp(0, (m.duration - self.p.fps.frame(1)).max(0));
+            let snapshot = player.snapshot();
+            // Do not restart an unchanged boundary every UI repaint, or cancel
+            // a slow decode on every mouse move. Display each submitted frame
+            // before requesting the latest boundary; intermediate targets are
+            // coalesced by the drag, with no queue of obsolete seeks.
+            if let Some(last) = &self.trim_preview
+                && last.request_id == snapshot.request_id
+                && ((last.media == media && last.source == source && last.crop == crop)
+                    || !last.complete)
+            {
+                return;
+            }
+            player.show_source_cropped(m.clone(), source, crop);
+            self.trim_preview = Some(TrimPreview {
+                media: media.into(),
+                source,
                 crop,
-            );
+                request_id: player.snapshot().request_id,
+                complete: false,
+            });
             self.source_preview = true;
         }
     }
@@ -1094,6 +1121,11 @@ impl Editor {
         self.update_crop_preview();
         if let Some(player) = &self.player {
             let snap = player.snapshot();
+            if let Some(trim) = &mut self.trim_preview
+                && trim.request_id == snap.request_id
+            {
+                trim.complete |= snap.presented_ms.is_some() || snap.error.is_some();
+            }
             if !snap.paused && self.preview_revision == Some(self.revision) {
                 self.playhead = snap.position.min(self.p.duration());
             }
@@ -1114,6 +1146,11 @@ impl Editor {
                         Some(ctx.load_texture("preview", image, egui::TextureOptions::LINEAR));
                 }
                 player.frame_presented(&frame);
+                if let Some(trim) = &mut self.trim_preview
+                    && trim.request_id == frame.request_id
+                {
+                    trim.complete = true;
+                }
             }
         }
         let dropped: Vec<_> = ctx.input(|i| {

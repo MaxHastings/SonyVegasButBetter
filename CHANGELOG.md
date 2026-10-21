@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.8 — Reliable live trimming preview
+
+- Keep the preview updating while holding either clip edge: coalesce mouse motion
+  and let each boundary frame reach the display before requesting the latest one.
+- Stop restarting unchanged boundary seeks on every UI repaint.
+- Give timeline drags preview priority over an open framing tool.
+- Use the linked video event’s framing when trimming from its audio event.
+- Show the source timecode beside the preview during a trim.
+- Add a native GUI regression for both edges, linked audio, held-pointer changes,
+  undo, save and export; it reproduces the failure on the previous build.
+
 ## 0.1.7 — Direct framing and manual pan/zoom
 
 - Draw directly in Preview and release to commit; remove Apply/Cancel steps.

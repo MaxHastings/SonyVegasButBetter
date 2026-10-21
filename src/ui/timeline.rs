@@ -408,6 +408,12 @@ impl Editor {
                     if response.drag_started() {
                         self.selected = Some(c.id.clone());
                         if !self.p.tracks[c.lane].locked {
+                            // Timeline gestures own preview until release. An
+                            // open framing tool must not restore its old frame.
+                            if self.crop_session.take().is_some() {
+                                self.seek(self.playhead);
+                            }
+                            self.trim_preview = None;
                             let origin = ui
                                 .input(|i| i.pointer.press_origin())
                                 .unwrap_or(rect.center());
@@ -468,14 +474,17 @@ impl Editor {
                                 let edge = self.drag_edge(&d, requested);
                                 if edit::trim_edge(&mut candidate, &d.id, d.edge < 0, edge).is_ok()
                                 {
-                                    let preview =
-                                        candidate.clips.iter().find(|x| x.id == d.id).unwrap();
+                                    let trimmed = candidate.clips.iter().find(|x| x.id == d.id).unwrap();
+                                    let preview = candidate.clips.iter().find(|x| {
+                                        x.lane == 0 && (x.id == trimmed.id ||
+                                            (trimmed.link.is_some() && x.link == trimmed.link))
+                                    }).unwrap_or(trimmed);
                                     let source = if d.edge < 0 {
                                         preview.source_in
                                     } else {
                                         preview.source_in + preview.duration - self.p.fps.frame(1)
                                     };
-                                    self.show_trim_source(&c.media, source, c.crop_at(source));
+                                    self.show_trim_source(&preview.media, source, preview.crop_at(source));
                                     self.status = format!(
                                         "{} · source {:.3}s · duration {:.3}s",
                                         if d.edge < 0 { "Trim start" } else { "Trim end" },
@@ -734,7 +743,7 @@ impl Editor {
             self.timeline_width = output.inner_rect.width();
         });
     }
-    fn drag_edge(&self, d: &Drag, at: Tick) -> Tick {
+    pub(super) fn drag_edge(&self, d: &Drag, at: Tick) -> Tick {
         let tolerance = ticks(8. / self.zoom as f64);
         let mut edge = self.p.fps.align(at);
         if self.snapping {

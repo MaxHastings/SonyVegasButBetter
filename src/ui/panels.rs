@@ -460,8 +460,14 @@ impl Editor {
                 self.action(Action::NextEdit);
             }
             ui.monospace(timecode(self.playhead, self.p.fps));
-            if self.source_preview && self.crop_session.is_none() {
-                ui.small("TRIM · source frame");
+            if self.source_preview
+                && self.crop_session.is_none()
+                && let Some(trim) = &self.trim_preview
+            {
+                ui.small(format!(
+                    "TRIM · source {}",
+                    timecode(trim.source, self.p.fps)
+                ));
             }
             ui.label("/");
             ui.monospace(timecode(self.p.duration(), self.p.fps));

@@ -6,7 +6,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Fixture generation failed' }
     cargo build --release --locked --features gui-test
     if ($LASTEXITCODE -ne 0) { throw 'GUI test build failed' }
-    foreach ($stage in @('1','2','qol','crop-size','placement','framing','seek-resize','responsive')) {
+    foreach ($stage in @('1','2','qol','crop-size','placement','framing','trim-preview','seek-resize','responsive')) {
         $env:SVBB_GUI_TEST = $stage
         $executable = Join-Path $projectRoot 'target\release\svbb.exe'
         if ($stage -ne '2') { $process = Start-Process $executable -WindowStyle Hidden -PassThru }

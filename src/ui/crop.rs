@@ -164,7 +164,7 @@ impl Editor {
         let at = c.source_in
             + (self.playhead - c.start).clamp(0, c.duration - self.p.fps.frame(1).min(c.duration));
         let mut close = false;
-        ui.horizontal_wrapped(|ui| {
+        egui::ScrollArea::horizontal().id_salt("framing-tools").show(ui, |ui| { ui.horizontal(|ui| {
             ui.strong("FRAME");
             let free = ui.selectable_value(&mut session.aspect,false,"Free");
             trace(ui.ctx(),"crop-free",&free);
@@ -186,7 +186,7 @@ impl Editor {
             let done = ui.button("×").on_hover_text("Close framing controls; changes are already saved to the edit [Esc]");
             trace(ui.ctx(),"frame-close",&done);
             close = done.clicked();
-        });
+        }); });
         if !c.framing.is_empty() {
             egui::ScrollArea::horizontal()
                 .id_salt("frame-points")
@@ -225,7 +225,9 @@ impl Editor {
                     });
                 });
         }
-        ui.small(if c.framing.is_empty() { "Drag the preview to frame · release saves · Ctrl+Z undoes · Alt+drag draws a new frame" } else { "Seek, then adjust to add a point · motion is linear between points · drag a corner to zoom" });
+        if c.framing.is_empty() {
+            ui.small("Drag to frame · release saves · Ctrl+Z undoes · Alt+drag redraws");
+        }
         if !ui.ctx().wants_keyboard_input() && ui.input(|i| i.key_pressed(Key::Escape)) {
             if let Some(drag) = session.drag.take() {
                 session.draft = drag.before;

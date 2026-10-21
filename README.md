@@ -4,13 +4,19 @@ A native, local video editor for cutting gameplay and mixing separate voice
 recordings. Rust owns the edit model; FFmpeg and libmpv provide media processing.
 No account, telemetry service or network access is needed for editing.
 
-**Early Windows preview.** [Download v0.1.8](https://github.com/MaxHastings/SonyVegasButBetter/releases/tag/v0.1.8) · [Changes](CHANGELOG.md) · [Report a bug](https://github.com/MaxHastings/SonyVegasButBetter/issues/new?template=bug_report.yml)
+**Early Windows preview.** [Download v0.1.9](https://github.com/MaxHastings/SonyVegasButBetter/releases/tag/v0.1.9) · [Changes](CHANGELOG.md) · [Report a bug](https://github.com/MaxHastings/SonyVegasButBetter/issues/new?template=bug_report.yml)
 
-![SVBB with direct framing, motion points and separate linked video/audio](docs/verification/0.1.7/framing-motion.png)
+![SVBB with a larger preview and compact linked timeline](docs/verification/0.1.9/workspace-edit.png)
+
+Use **Expand** beside Preview (**Ctrl+Shift+F**) to focus on the picture while
+keeping playback and framing controls. **Restore layout** returns to editing.
+**Media** and **Properties** toggle the sidebars; drag dividers to resize them.
+Panel sizes and sidebar visibility are remembered. **View → Reset workspace layout**
+restores defaults.
 
 ## Run
 
-1. Download **SVBB-0.1.8-windows-x64-first-run.zip** from the release page.
+1. Download **SVBB-0.1.9-windows-x64-first-run.zip** from the release page.
 2. Extract the entire ZIP to a writable folder, such as Documents\SVBB.
 3. Double-click **Start SVBB.cmd**. First launch downloads and verifies about
    250 MB of media tools from upstream. Windows 10/11 x64 is required.

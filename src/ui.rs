@@ -28,6 +28,7 @@ mod dialogs;
 mod harness;
 mod panels;
 mod timeline;
+mod workspace;
 const RENDER_PRESETS: [&str; 6] = [
     "Match project",
     "1080p30",
@@ -98,6 +99,7 @@ enum Action {
     ZoomOut,
     FitTimeline,
     FitSelection,
+    PreviewFocus,
     PreviousEdit,
     NextEdit,
     AppendMedia,
@@ -148,6 +150,7 @@ fn bindings() -> Vec<Binding> {
         (Modifiers::NONE, Key::Minus, ZoomOut),
         (Modifiers::NONE, Key::F, FitTimeline),
         (shift, Key::F, FitSelection),
+        (cs, Key::F, PreviewFocus),
         (alt, Key::ArrowLeft, PreviousEdit),
         (alt, Key::ArrowRight, NextEdit),
         (command, Key::Enter, AppendMedia),
@@ -222,6 +225,10 @@ struct Editor {
     source_preview: bool,
     trim_preview: Option<TrimPreview>,
     crop_session: Option<crop::CropSession>,
+    workspace: workspace::Workspace,
+    workspace_path: PathBuf,
+    workspace_epoch: u64,
+    preview_focus: bool,
     play_when_ready: bool,
     drag: Option<Drag>,
     wave: HashMap<String, Vec<f32>>,
@@ -307,6 +314,8 @@ impl Editor {
             .map(|r| r.cache.parent().unwrap().join("recovery.svbb"))
             .unwrap_or_else(|| std::env::temp_dir().join("svbb-recovery.svbb"));
         let recovery_dir = recovery.parent().unwrap();
+        let workspace_path = recovery_dir.join("workspace.json");
+        let workspace = workspace::Workspace::load(&workspace_path);
         let mut recoveries: Vec<_> = std::fs::read_dir(recovery_dir)
             .into_iter()
             .flatten()
@@ -352,6 +361,10 @@ impl Editor {
             source_preview: false,
             trim_preview: None,
             crop_session: None,
+            workspace,
+            workspace_path,
+            workspace_epoch: 0,
+            preview_focus: false,
             play_when_ready: false,
             drag: None,
             wave: HashMap::new(),
@@ -405,6 +418,9 @@ impl Editor {
         }
         #[cfg(feature = "gui-test")]
         if let Some(stage) = std::env::var_os("SVBB_GUI_TEST") {
+            if stage != "layout-restore" {
+                app.workspace = workspace::Workspace::default();
+            }
             let harness = harness::Harness::new(stage.to_string_lossy().as_ref());
             app.recovery_available = false;
             app.recovery = harness.root.join("gui-recovery.svbb");
@@ -1222,6 +1238,7 @@ impl Editor {
             Action::ZoomOut => self.zoom_timeline(self.zoom / 1.4, None),
             Action::FitTimeline => self.fit_timeline(),
             Action::FitSelection => self.fit_selection(),
+            Action::PreviewFocus => self.toggle_preview_focus(),
             Action::PreviousEdit | Action::NextEdit => {
                 let lane = self
                     .selected
@@ -1372,6 +1389,18 @@ impl eframe::App for Editor {
             }
         }
         self.top(ctx);
+        if self.preview_focus
+            && self.crop_session.is_none()
+            && !self.render_dialog
+            && !self.confirm_unsaved
+            && !self.help
+            && !self.project_settings
+            && self.error.is_none()
+            && !ctx.wants_keyboard_input()
+            && ctx.input(|i| i.key_pressed(Key::Escape))
+        {
+            self.preview_focus = false;
+        }
         egui::TopBottomPanel::bottom("status")
             .exact_height(26.)
             .show(ctx, |ui| {
@@ -1395,22 +1424,44 @@ impl eframe::App for Editor {
                     });
                 });
             });
-        egui::TopBottomPanel::bottom("timeline-panel")
-            .resizable(true)
-            .default_height(410.)
-            .min_height(330.)
-            .max_height((ctx.screen_rect().height() - 240.).max(330.))
-            .show(ctx, |ui| self.timeline(ui));
-        egui::SidePanel::left("media-panel")
-            .resizable(true)
-            .default_width(370.)
-            .width_range(240.0..=640.)
-            .show(ctx, |ui| self.media_panel(ui));
-        egui::SidePanel::right("properties-panel")
-            .resizable(true)
-            .default_width(275.)
-            .width_range(240.0..=380.)
-            .show(ctx, |ui| self.inspector(ui));
+        if !self.preview_focus {
+            let timeline =
+                egui::TopBottomPanel::bottom(Id::new(("timeline-panel", self.workspace_epoch)))
+                    .resizable(true)
+                    .default_height(self.workspace.timeline_height)
+                    .min_height(270.)
+                    .max_height((ctx.screen_rect().height() - 400.).max(270.))
+                    .show(ctx, |ui| self.timeline(ui));
+            self.workspace.timeline_height = timeline.response.rect.height();
+            if self.workspace.media {
+                let other = if self.workspace.properties {
+                    self.workspace.properties_width.min(380.)
+                } else {
+                    0.
+                };
+                let max_width = (ctx.available_rect().width() - other - 400.).clamp(210., 520.);
+                let media = egui::SidePanel::left(Id::new(("media-panel", self.workspace_epoch)))
+                    .resizable(true)
+                    .default_width(self.workspace.media_width)
+                    .width_range(210.0..=max_width)
+                    .show(ctx, |ui| self.media_panel(ui));
+                self.workspace.media_width = media.response.rect.width();
+            }
+            if self.workspace.properties {
+                let max_width = (ctx.available_rect().width() - 400.).clamp(230., 380.);
+                let properties =
+                    egui::SidePanel::right(Id::new(("properties-panel", self.workspace_epoch)))
+                        .resizable(true)
+                        .default_width(self.workspace.properties_width)
+                        .width_range(230.0..=max_width)
+                        .show(ctx, |ui| {
+                            egui::ScrollArea::vertical()
+                                .id_salt("inspector-scroll")
+                                .show(ui, |ui| self.inspector(ui));
+                        });
+                self.workspace.properties_width = properties.response.rect.width();
+            }
+        }
         egui::CentralPanel::default().show(ctx, |ui| self.preview_panel(ui));
         self.dialogs(ctx);
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(format!(
@@ -1421,6 +1472,7 @@ impl eframe::App for Editor {
         ctx.request_repaint_after(Duration::from_millis(16));
     }
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.workspace.save(&self.workspace_path);
         self.asset_cancel.store(true, Ordering::Relaxed);
         if let Some((_, cancel, worker)) = self.preview_job.take() {
             cancel.store(true, Ordering::Relaxed);

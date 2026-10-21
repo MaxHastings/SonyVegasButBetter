@@ -7,8 +7,11 @@
     },
     {
       "file": "mpv.7z",
-      "url": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260903/mpv-dev-x86_64-20260903-git-69e63f425a.7z",
-      "sha256": "fac135c68a35b7639e39d72c0c365104edbaebdea39a0dfdd8c36e8c8e80faef"
+      "url": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261018/mpv-dev-x86_64-20261018-git-01e2533f31.7z",
+      "sha256": "d7f5621f42b6e161fe032df914a10bdece28a89df3e57c6c3e16a5a250929b5e",
+      "mirrors": [
+        "https://downloads.sourceforge.net/project/mpv-player-windows/libmpv/mpv-dev-x86_64-20261018-git-01e2533f31.7z"
+      ]
     },
     {
       "file": "ffmpeg-shared.zip",
@@ -27,7 +30,7 @@
     },
     {
       "path": "mpv/libmpv-2.dll",
-      "sha256": "673e6397920ab64a9c5b3a618f7f16d38854efe72b58665f1f84e4e873b763a4"
+      "sha256": "82bae3b6bf7bb737afc9b52d590b477983c715f3c63c1a361f9ee06523dc5dc2"
     },
     {
       "path": "av/avcodec-63.dll",
@@ -51,8 +54,8 @@
     }
   ],
   "ffmpeg_source": "https://github.com/FFmpeg/FFmpeg/commit/946fcce07b",
-  "mpv_source": "https://github.com/mpv-player/mpv/commit/69e63f425a",
-  "mpv_build_source": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20260903",
+  "mpv_source": "https://github.com/mpv-player/mpv/commit/01e2533f31",
+  "mpv_build_source": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261018",
   "preview_ffmpeg_build_source": "https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-10-18-13-01",
   "vulkan_loader": {
     "version": "1.4.363",

@@ -1,0 +1,21 @@
+{
+  "version": "0.1.9",
+  "core_ui_budget_checks": 36,
+  "native_media_checks": 13,
+  "gui_steps": 516,
+  "gui_stages": 9,
+  "refreshed_runtime": "shinchiro 20261018 mpv 01e2533f31",
+  "gui_stages_repeated_with_refreshed_runtime": [
+    "layout",
+    "layout-restore",
+    "framing",
+    "trim-preview",
+    "responsive"
+  ],
+  "fresh_setup": "All three archives downloaded and verified; offline repeat passed",
+  "mpv_mirror": "GitHub and upstream SourceForge produced identical pinned bytes",
+  "limitations": [
+    "Synthetic fixtures; real-gameplay visual judgement remains a user playtest",
+    "Windows x64 native GUI only; no local macOS/Linux GUI validation"
+  ]
+}

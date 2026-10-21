@@ -39,6 +39,8 @@ enum Step {
     Crash,
     Capture(&'static str),
     Measure(&'static str),
+    Resize(Vec2),
+    RememberPreview,
 }
 pub(super) struct Harness {
     pub root: PathBuf,
@@ -55,6 +57,7 @@ pub(super) struct Harness {
     baseline_view: Option<(f32, f32, f32)>,
     last_report: Instant,
     measurements: Vec<serde_json::Value>,
+    preview_rect: Option<Rect>,
 }
 fn key(k: Key, m: Modifiers) -> Step {
     Step::Key(k, m)
@@ -72,7 +75,66 @@ impl Harness {
     pub fn new(stage: &str) -> Self {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-output");
         let mut steps = VecDeque::new();
-        if stage == "trim-preview" {
+        if stage == "layout-restore" {
+            steps.push_back(Step::Assert("workspace-loaded"));
+            steps.push_back(click("toggle-media"));
+            steps.push_back(Step::Assert("workspace-default"));
+            steps.push_back(Step::Finish);
+        } else if stage == "layout" {
+            steps.push_back(Step::Drop);
+            steps.push_back(Step::Wait("imported"));
+            steps.push_back(click("media:gameplay-1.mp4"));
+            steps.push_back(key(Key::Enter, Modifiers::COMMAND));
+            prop(&mut steps, "Duration (s)", "6");
+            steps.push_back(Step::Wait("preview"));
+            steps.push_back(Step::Assert("preview-roomy"));
+            steps.push_back(Step::Remember);
+            steps.push_back(Step::RememberPreview);
+            steps.push_back(Step::Capture("workspace-edit.png"));
+            steps.push_back(Step::Wait("captured"));
+            steps.push_back(click("toggle-media"));
+            steps.push_back(click("toggle-properties"));
+            steps.push_back(Step::Assert("panels-hidden"));
+            steps.push_back(click("toggle-media"));
+            steps.push_back(click("toggle-properties"));
+            steps.push_back(click("preview-focus"));
+            steps.push_back(Step::Assert("preview-expanded"));
+            steps.push_back(Step::Capture("workspace-focus.png"));
+            steps.push_back(Step::Wait("captured"));
+            steps.push_back(key(Key::Escape, Modifiers::NONE));
+            steps.push_back(Step::Assert("preview-restored"));
+            steps.push_back(key(
+                Key::F,
+                Modifiers {
+                    shift: true,
+                    ..Modifiers::COMMAND
+                },
+            ));
+            steps.push_back(Step::Assert("preview-expanded"));
+            // Direct drawing must still map to the pixels under the pointer.
+            steps.push_back(Step::Drag(
+                Target::CropPoint(0.15, 0.15),
+                Target::CropPoint(0.75, 0.75),
+            ));
+            steps.push_back(Step::Assert("frame-direct"));
+            steps.push_back(key(Key::Escape, Modifiers::NONE));
+            steps.push_back(key(Key::Escape, Modifiers::NONE));
+            steps.push_back(Step::Assert("preview-restored"));
+            steps.push_back(key(Key::Z, Modifiers::COMMAND));
+            steps.push_back(Step::Assert("restored"));
+            for (size, capture) in [
+                (Vec2::new(1024., 700.), "workspace-small.png"),
+                (Vec2::new(2560., 1080.), "workspace-wide.png"),
+                (Vec2::new(1440., 900.), "workspace-resized.png"),
+            ] {
+                steps.push_back(Step::Resize(size));
+                steps.push_back(Step::Wait("layout-settled"));
+                steps.push_back(Step::Assert("preview-bounded"));
+                steps.push_back(Step::Capture(capture));
+                steps.push_back(Step::Wait("captured"));
+            }
+            steps.push_back(click("toggle-media"));
+        } else if stage == "trim-preview" {
             steps.push_back(Step::Drop);
             steps.push_back(Step::Wait("imported"));
             steps.push_back(click("media:gameplay-1.mp4"));
@@ -573,7 +635,7 @@ impl Harness {
             steps.push_back(Step::Click(Target::Clip(0, 0)));
             prop(&mut steps, "Duration (s)", "4.5");
         }
-        if !stage.starts_with("crash-") {
+        if !stage.starts_with("crash-") && stage != "layout-restore" {
             steps.push_back(key(Key::S, Modifiers::COMMAND));
             steps.push_back(Step::Wait("saved"));
             steps.push_back(key(Key::R, Modifiers::COMMAND));
@@ -608,6 +670,7 @@ impl Harness {
             baseline_view: None,
             last_report: Instant::now(),
             measurements: vec![],
+            preview_rect: None,
         }
     }
     fn point(&self, target: &Target, app: &Editor, ctx: &egui::Context) -> Result<Pos2> {
@@ -797,6 +860,13 @@ impl Harness {
         };
         let result = (|| -> Result<bool> {
             match &step {
+                Step::Resize(size) => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(*size));
+                }
+                Step::RememberPreview => {
+                    self.preview_rect =
+                        ctx.data(|d| d.get_temp(Id::new(("gui-probe", "preview-image"))));
+                }
                 Step::Measure(label) => {
                     let state = app.player.as_ref().context("Missing player")?.snapshot();
                     if state.presented_ms.is_none() || app.preview_revision != Some(app.revision) {
@@ -881,6 +951,7 @@ impl Harness {
                 Step::Key(k, m) => self.keyboard(*k, *m),
                 Step::Wait(condition) => {
                     let ok = match *condition {
+                        "layout-settled" => self.last_step.elapsed() > Duration::from_millis(500),
                         "imported" => app.p.media.len() == 7 && !app.importing,
                         "opened" => app.p.clips.len() == 30,
                         "autosave" => {
@@ -963,6 +1034,49 @@ impl Harness {
                     }
                 }
                 Step::Assert(condition) => match *condition {
+                    "workspace-loaded" => anyhow::ensure!(
+                        !app.workspace.media && app.workspace.properties && !app.preview_focus,
+                        "Workspace preferences did not survive a restart"
+                    ),
+                    "workspace-default" => anyhow::ensure!(
+                        app.workspace.media && app.workspace.properties,
+                        "Hidden media panel cannot be restored"
+                    ),
+                    "preview-roomy" | "preview-expanded" | "preview-restored"
+                    | "preview-bounded" => {
+                        let rect: Rect = ctx
+                            .data(|d| d.get_temp(Id::new(("gui-probe", "preview-image"))))
+                            .context("No preview image")?;
+                        anyhow::ensure!(
+                            ctx.screen_rect().contains_rect(rect) && rect.height() > 170.,
+                            "Preview clipped or too small: {rect:?}"
+                        );
+                        if *condition == "preview-roomy" {
+                            anyhow::ensure!(
+                                rect.height() > 350.,
+                                "Default preview wastes vertical space: {rect:?}"
+                            );
+                        }
+                        if *condition == "preview-expanded" {
+                            anyhow::ensure!(
+                                app.preview_focus
+                                    && rect.area() > self.preview_rect.unwrap().area() * 1.5,
+                                "Focus did not substantially enlarge the preview"
+                            );
+                        }
+                        if *condition == "preview-restored" {
+                            anyhow::ensure!(
+                                !app.preview_focus
+                                    && (rect.height() - self.preview_rect.unwrap().height()).abs()
+                                        < 2.,
+                                "Normal layout was not restored"
+                            );
+                        }
+                    }
+                    "panels-hidden" => anyhow::ensure!(
+                        !app.workspace.media && !app.workspace.properties,
+                        "Panel toggles did not hide sidebars"
+                    ),
                     "trim-uncommitted" => anyhow::ensure!(
                         app.p == *self.baseline.as_ref().unwrap(),
                         "Previewing a held trim must not commit the edit"

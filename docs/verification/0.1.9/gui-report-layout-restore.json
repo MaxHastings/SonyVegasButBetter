@@ -1,0 +1,16 @@
+{
+  "clips": 0,
+  "duration_seconds": 0.0,
+  "elapsed_seconds": 0.3192867,
+  "encoder_used": null,
+  "events": [
+    "0: Assert(\"workspace-loaded\"); clips=0 selected=None media=None; duration=[]; property=None",
+    "1: Click(Named(\"toggle-media\")); clips=0 selected=None media=None; duration=[]; property=None",
+    "2: Assert(\"workspace-default\"); clips=0 selected=None media=None; duration=[]; property=None"
+  ],
+  "measurements": [],
+  "passed": true,
+  "stage": "layout-restore",
+  "steps": 3,
+  "verified": "Native eframe window; egui raw pointer/keyboard/drop events; live media adapters; real save and export"
+}

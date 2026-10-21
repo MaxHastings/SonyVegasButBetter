@@ -32,7 +32,7 @@ Regenerate using `python scripts/collect-licenses.py` after dependency changes.
   Source commit **946fcce07b**; exact archive and binary hashes are in
   runtime-manifest.json. Configure flags are in `licenses/FFmpeg-configuration.txt`;
   the package also contains the original upstream build README and GPL text.
-* libmpv: shinchiro **20260903**, mpv commit **69e63f425a**, x86_64 shared build.
+* libmpv: shinchiro **20261018**, mpv commit **01e2533f31**, x86_64 shared build.
   This provides audio-device output, buffering and master filtering.
   The pinned build recipe/release and binary hashes are in runtime-manifest.json.
   `licenses/mpv-GPL.txt` preserves the upstream GPL text. mpv/FFmpeg linked
@@ -49,8 +49,8 @@ Regenerate using `python scripts/collect-licenses.py` after dependency changes.
 
 Primary provenance: [Gyan build/source details](https://www.gyan.dev/ffmpeg/builds/),
 [pinned FFmpeg source](https://github.com/FFmpeg/FFmpeg/commit/946fcce07b),
-[pinned mpv binary/build release](https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20260903),
-[mpv source](https://github.com/mpv-player/mpv/commit/69e63f425a).
+[pinned mpv binary/build release](https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261018),
+[mpv source](https://github.com/mpv-player/mpv/commit/01e2533f31).
 
 The installed Kdenlive runtime was inspected but is **not packaged**: it enables
 `--enable-nonfree`. The selected FFmpeg configure record does not enable nonfree.

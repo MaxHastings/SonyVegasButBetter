@@ -16,7 +16,7 @@ impl Editor {
             });
         });
         ui.separator();
-        let lane_h = ((ui.available_height() - 44.) / LANES as f32).clamp(64., 160.);
+        let lane_h = ((ui.available_height() - 44.) / LANES as f32).clamp(48., 160.);
         let header_w = 196.;
         let ruler_h = 26.;
         let available = ui.available_width();
@@ -40,7 +40,8 @@ impl Editor {
                 controls.horizontal(|ui| {
                     let (mut mute, mut locked) = (t.mute, t.locked);
                     if ui
-                        .checkbox(&mut mute, if lane == 0 { "Hide" } else { "Mute" })
+                        .checkbox(&mut mute, if lane == 0 { "Hide" } else { "M" })
+                        .on_hover_text(if lane == 0 { "Hide video track" } else { "Mute audio track" })
                         .changed()
                     {
                         self.apply(|p| {
@@ -48,17 +49,17 @@ impl Editor {
                             Ok(())
                         });
                     }
-                    if ui.checkbox(&mut locked, "Lock").changed() {
+                    if ui.checkbox(&mut locked, "L").on_hover_text("Lock track").changed() {
                         self.apply(|p| {
                             p.tracks[lane].locked = locked;
                             Ok(())
                         });
                     }
-                });
                 if lane > 0 {
                     let mut gain = t.gain_db;
+                    ui.spacing_mut().slider_width = 45.;
                     let response =
-                        controls.add(egui::Slider::new(&mut gain, -60.0..=60.0).suffix(" dB"));
+                        ui.add(egui::Slider::new(&mut gain, -60.0..=60.0).suffix(" dB").max_decimals(1));
                     trace(ui.ctx(), format!("track-gain-{lane}"), &response);
                     if response.changed() {
                         self.apply(|p| {
@@ -67,6 +68,7 @@ impl Editor {
                         });
                     }
                 }
+                });
                 ui.painter().line_segment(
                     [rect.left_bottom(), rect.right_bottom()],
                     Stroke::new(1., Color32::from_gray(60)),
@@ -264,7 +266,7 @@ impl Editor {
                     let m = self.p.media(&c.media).ok();
                     if let Some(m) = m {
                         clip_painter.text(
-                            rect.min + Vec2::new(7., 14.),
+                            rect.min + Vec2::new(7., 8.),
                             Align2::LEFT_TOP,
                             format!("{}{}", if c.link.is_some() { "↔ " } else { "" }, m.name),
                             FontId::proportional(12.),
@@ -273,8 +275,8 @@ impl Editor {
                         if c.lane > 0
                             && let Some(wave) = self.wave.get(&c.media)
                         {
-                            let center = rect.top() + rect.height() * 0.65;
-                            let half = rect.height() * 0.22;
+                            let half = ((rect.height() - 24.) / 2.).max(2.);
+                            let center = rect.bottom() - 2. - half;
                             let begin = rect.left().max(visible.left()).ceil() as i32;
                             let end = rect.right().min(visible.right()).floor() as i32;
                             let amp = amplitude(c.gain_db + self.p.tracks[c.lane].gain_db) as f32;

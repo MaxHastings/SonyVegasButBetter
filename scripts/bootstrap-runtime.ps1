@@ -5,7 +5,17 @@ New-Item -ItemType Directory -Force $runtimeDir | Out-Null
 $manifest = Get-Content (Join-Path $projectRoot 'runtime-manifest.json') -Raw | ConvertFrom-Json
 foreach ($item in $manifest.archives) {
     $archivePath = Join-Path $runtimeDir $item.file
-    if (!(Test-Path -LiteralPath $archivePath)) { Invoke-WebRequest $item.url -OutFile $archivePath }
+    if (!(Test-Path -LiteralPath $archivePath)) {
+        $urls = @($item.url) + @($item.mirrors | Where-Object { $_ })
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+                Invoke-WebRequest -UseBasicParsing $urls[($attempt - 1) % $urls.Count] -OutFile "$archivePath.download"
+                if ((Get-FileHash -LiteralPath "$archivePath.download" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $item.sha256) { throw "Checksum mismatch for $($item.file)." }
+                Move-Item -LiteralPath "$archivePath.download" -Destination $archivePath -Force
+                break
+            } catch { if ($attempt -eq 3) { throw } }
+        }
+    }
     $actualHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actualHash -ne $item.sha256) { throw "Checksum mismatch for $($item.file). Refusing changed runtime." }
 }

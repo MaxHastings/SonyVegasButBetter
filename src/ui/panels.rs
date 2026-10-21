@@ -73,6 +73,14 @@ impl Editor {
                         self.fit_selection(); ui.close_menu();
                     }
                 });
+                ui.menu_button("View", |ui| {
+                    if ui.selectable_label(self.preview_focus, "Preview focus    Ctrl+Shift+F").clicked() {
+                        self.toggle_preview_focus(); ui.close_menu();
+                    }
+                    ui.checkbox(&mut self.workspace.media, "Project media");
+                    ui.checkbox(&mut self.workspace.properties, "Clip properties");
+                    if ui.button("Reset workspace layout").clicked() { self.reset_workspace(); ui.close_menu(); }
+                });
                 if ui.button("Shortcuts / Help").clicked() {
                     self.help = true;
                 }
@@ -346,6 +354,19 @@ impl Editor {
         ui.horizontal(|ui| {
             ui.set_min_height(24.);
             ui.strong("PREVIEW");
+            let can_layout = self.drag.is_none() && self.crop_session.as_ref().is_none_or(|s| !s.dragging());
+            let focus = ui.add_enabled(can_layout, egui::Button::new(if self.preview_focus { "Restore layout" } else { "Expand" }))
+                .on_hover_text("Focus on Preview; keep playback and framing controls. Ctrl+Shift+F toggles; Esc returns after closing framing controls.");
+            trace(ui.ctx(), "preview-focus", &focus);
+            if focus.clicked() { self.toggle_preview_focus(); }
+            if !self.preview_focus {
+                let media = ui.add_enabled(can_layout, egui::Button::new("Media").selected(self.workspace.media));
+                trace(ui.ctx(), "toggle-media", &media);
+                if media.clicked() { self.workspace.media = !self.workspace.media; }
+                let properties = ui.add_enabled(can_layout, egui::Button::new("Properties").selected(self.workspace.properties));
+                trace(ui.ctx(), "toggle-properties", &properties);
+                if properties.clicked() { self.workspace.properties = !self.workspace.properties; }
+            }
             if self.crop_session.is_none() {
                 let can_crop = self
                     .selected
@@ -359,7 +380,7 @@ impl Editor {
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(format!(
+                ui.small(format!(
                     "{} × {} / {:.3}p",
                     self.p.width,
                     self.p.height,
@@ -369,13 +390,13 @@ impl Editor {
         });
         // Keep the preview stationary when a direct drag first reveals controls.
         ui.allocate_ui_with_layout(
-            Vec2::new(ui.available_width(), 72.),
+            Vec2::new(ui.available_width(), 52.),
             egui::Layout::top_down(egui::Align::Min),
             |ui| {
-                ui.set_min_height(72.);
+                ui.set_min_height(52.);
                 egui::ScrollArea::vertical()
                     .id_salt("framing-controls")
-                    .max_height(72.)
+                    .max_height(52.)
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         if self.crop_session.is_some() {
@@ -389,16 +410,13 @@ impl Editor {
             },
         );
         let space = ui.available_size();
-        let height = (space.y - 90.).max(40.);
-        let size = Vec2::new(space.x, (space.x * 9. / 16.).min(height));
+        let size = Vec2::new(space.x, (space.y - 58.).max(40.));
         let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
         ui.painter().rect_filled(rect, 0., Color32::BLACK);
-        let mut target = rect;
-        let w = rect.height() * 16. / 9.;
-        if w < rect.width() {
-            target.min.x += (rect.width() - w) / 2.;
-            target.max.x = target.min.x + w;
-        }
+        let target = workspace::fit_preview(rect);
+        #[cfg(feature = "gui-test")]
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(Id::new(("gui-probe", "preview-image")), target));
         if let Some(t) = &self.texture {
             ui.painter().image(
                 t.id(),
@@ -486,18 +504,18 @@ impl Editor {
                 ui.small("Seeking preview…");
             }
         });
-        let mut time = seconds(self.playhead);
-        if ui
-            .add(
-                egui::Slider::new(&mut time, 0.0..=seconds(self.p.duration()).max(0.001))
-                    .show_value(false),
-            )
-            .changed()
-        {
-            self.seek(ticks(time));
-        }
         ui.horizontal(|ui| {
-            ui.small("OUTPUT");
+            let mut time = seconds(self.playhead);
+            ui.spacing_mut().slider_width = (ui.available_width() - 290.).max(80.);
+            if ui
+                .add(
+                    egui::Slider::new(&mut time, 0.0..=seconds(self.p.duration()).max(0.001))
+                        .show_value(false),
+                )
+                .changed()
+            {
+                self.seek(ticks(time));
+            }
             let peaks = self
                 .player
                 .as_ref()
@@ -505,7 +523,7 @@ impl Editor {
                 .unwrap_or([-120.; 2]);
             for (channel, db) in ["L", "R"].into_iter().zip(peaks) {
                 ui.small(channel);
-                let (rect, _) = ui.allocate_exact_size(Vec2::new(90., 7.), Sense::hover());
+                let (rect, _) = ui.allocate_exact_size(Vec2::new(50., 7.), Sense::hover());
                 ui.painter().rect_filled(rect, 0., Color32::from_gray(45));
                 let mut fill = rect;
                 fill.max.x = fill.min.x + rect.width() * ((db + 60.) / 60.).clamp(0., 1.) as f32;

@@ -36,9 +36,10 @@ try {
                 Write-SetupStatus "Downloading $($item.file)..."
                 $download = "$archive.download"
                 $downloaded = $false
+                $urls = @($item.url) + @($item.mirrors | Where-Object { $_ })
                 for ($attempt = 1; $attempt -le 3; $attempt++) {
                     try {
-                        Invoke-WebRequest -UseBasicParsing -Uri $item.url -OutFile $download
+                        Invoke-WebRequest -UseBasicParsing -Uri $urls[($attempt - 1) % $urls.Count] -OutFile $download
                         if ((Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash.ToLowerInvariant() -ne $item.sha256) { throw "Checksum mismatch for $($item.file). Refusing changed media tools." }
                         Move-Item -LiteralPath $download -Destination $archive -Force
                         $downloaded = $true

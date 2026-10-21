@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.9 — A workspace built around Preview
+
+- Give Preview more room with narrower sidebars and a compact timeline by default.
+- Add Expand / Restore layout and Ctrl+Shift+F for a preview focus view; playback
+  and framing remain available. Escape closes framing first, then exits focus.
+- Add Media / Properties sidebar toggles, remembered panel sizes/visibility, a
+  scrollable inspector and View → Reset workspace layout.
+- Fit Preview within the available width and height; compact its controls while
+  keeping the image stable when a framing gesture reveals contextual controls.
+- Keep compact audio waveforms below their labels and track gain/mute/lock handy.
+- Test normal, minimum and ultrawide windows, focus/restore, direct framing and
+  preferences across a restart; rerun existing editing GUI stages.
+- Refresh the expired libmpv download pin to the 20261018 build; add its upstream
+  SourceForge mirror with the same required hash and retry-safe bootstrap downloads.
+
 ## 0.1.8 — Reliable live trimming preview
 
 - Keep the preview updating while holding either clip edge: coalesce mouse motion

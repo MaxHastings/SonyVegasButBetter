@@ -106,3 +106,11 @@ every real gameplay recording. See TESTING.md for executed results.
 Report crashes, lost changes, wrong cuts, shifted audio, stalls, unexpected ripple
 behavior and failed exports first. Include source codec/resolution/FPS, project
 settings, the exact action and whether the issue reproduces after reopening.
+
+## Workspace
+
+Expand beside Preview (Ctrl+Shift+F) hides the editing panels while retaining
+playback and framing controls. Restore layout returns. Escape closes framing
+controls first, then exits focus. Media and Properties toggle the sidebars.
+Resize using the dividers; sizes and sidebar visibility are remembered. Use
+View → Reset workspace layout to return to the default arrangement.

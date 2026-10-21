@@ -39,7 +39,22 @@ pointer/keyboard/drop events into the actual native window, targeting rectangles
 observed from the previous UI pass. It uses real controls, commands and workers.
 The distributed release excludes this driver.
 
-## Current 0.1.8 checks
+## Current 0.1.9 checks
+
+36 core/UI/budget checks and 13 native-media tests pass locally, plus 516 GUI
+steps across nine stages. The new layout stage checks preview bounds and default
+size, sidebar toggles, substantially larger focus view, restoration of the edit
+layout, direct framing geometry in focus mode and window sizes 1024×700,
+2560×1080 and 1440×900. A separate native process verifies saved sidebar visibility
+loads and can be restored. Reports and screenshots are in `docs/verification/0.1.9`.
+
+All thirteen native-media tests pass with the refreshed libmpv 20261018 build.
+Layout, restart preferences, framing, trim preview and responsive preview GUI
+stages are repeated against that runtime. A cold first-run setup downloads all
+three pinned archives, verifies all binaries and starts offline on a second run.
+Both upstream mpv download locations were verified to produce the pinned archive.
+
+## Previous 0.1.8 checks
 
 Version 0.1.8 passes 36 core/UI/budget checks, eight native preview/media edge
 tests, and 283 native GUI steps across trim-preview, framing, seek-resize and
